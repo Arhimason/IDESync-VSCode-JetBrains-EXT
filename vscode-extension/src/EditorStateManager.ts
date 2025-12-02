@@ -4,14 +4,14 @@ import {Logger} from "./Logger";
 import {FileUtils} from './FileUtils';
 
 /**
- * 编辑器状态管理器
- * 负责状态缓存、防抖和去重
+ * Editor state manager
+ * Responsible for state caching, debouncing and deduplication
  */
 export class EditorStateManager {
     private logger: Logger;
-    // 按文件路径分组的防抖定时器
+    // Debounce timers grouped by file path
     private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
-    // 防抖延迟
+    // Debounce delay
     private readonly debounceDelayMs = 300;
 
     private stateChangeCallback: ((state: EditorState) => void) | null = null;
@@ -21,14 +21,14 @@ export class EditorStateManager {
     }
 
     /**
-     * 设置状态变化回调
+     * Set state change callback
      */
     setStateChangeCallback(callback: (state: EditorState) => void) {
         this.stateChangeCallback = callback;
     }
 
     /**
-     * 创建编辑器状态
+     * Create editor state
      */
     createEditorState(
         editor: vscode.TextEditor,
@@ -37,7 +37,7 @@ export class EditorStateManager {
     ): EditorState {
         const position = FileUtils.getEditorCursorPosition(editor);
 
-        // 获取选中范围坐标
+        // Get selection range coordinates
         const selectionCoordinates = FileUtils.getSelectionCoordinates(editor);
 
         return new EditorState(
@@ -69,7 +69,7 @@ export class EditorStateManager {
     }
 
     /**
-     * 从文件Path创建建编辑器状态
+     * Create editor state from file path
      */
     createEditorStateFromPath(
         path: string,
@@ -89,7 +89,7 @@ export class EditorStateManager {
 
 
     /**
-     * 创建工作区同步状态
+     * Create workspace sync state
      */
     createWorkspaceSyncState(isActive: boolean): EditorState {
         const activeEditor = FileUtils.getCurrentActiveEditor();
@@ -108,7 +108,7 @@ export class EditorStateManager {
                 openedFiles
             );
         } else {
-            // 没有活跃编辑器时，使用空的文件路径和位置
+            // When there is no active editor, use empty file path and position
             return new EditorState(
                 ActionType.WORKSPACE_SYNC,
                 '',
@@ -123,34 +123,34 @@ export class EditorStateManager {
     }
 
     /**
-     * 清理指定文件路径的防抖定时器
+     * Clear debounce timer for specified file path
      */
     private clearDebounceTimer(filePath: string) {
         const timer = this.debounceTimers.get(filePath);
         if (timer) {
             clearTimeout(timer);
             this.debounceTimers.delete(filePath);
-            this.logger.debug(`清理文件防抖定时器: ${filePath}`);
+            this.logger.debug(`Cleared file debounce timer: ${filePath}`);
         }
     }
 
     /**
-     * 防抖更新状态
+     * Debounced update state
      */
     debouncedUpdateState(state: EditorState) {
         const filePath = state.filePath;
 
-        // 清除该文件之前的防抖定时器
+        // Clear previous debounce timer for this file
         this.clearDebounceTimer(filePath);
 
-        // 创建新的防抖定时器
+        // Create new debounce timer
         const timer = setTimeout(() => {
             try {
                 this.updateState(state);
             } catch (error) {
-                this.logger.warn(`更新状态时发生错误: ${error}`);
+                this.logger.warn(`Error occurred while updating state: ${error}`);
             } finally {
-                // 无论是否发生异常，都要清理定时器，防止内存泄漏
+                // Regardless of whether an exception occurs, clean up timer to prevent memory leaks
                 this.debounceTimers.delete(filePath);
             }
         }, this.debounceDelayMs);
@@ -159,31 +159,31 @@ export class EditorStateManager {
     }
 
     /**
-     * 立即更新状态
+     * Update state immediately
      */
     updateState(state: EditorState) {
-        // 如果是文件关闭操作，立即清理防抖定时器并直接处理
+        // If it's a file close operation, immediately clear debounce timer and handle directly
         if (state.action === ActionType.CLOSE) {
             this.clearDebounceTimer(state.filePath);
         }
-        // 通知状态变化
+        // Notify state change
         this.stateChangeCallback?.(state);
     }
 
     /**
-     * 发送当前状态
-     * 获取当前活跃编辑器的状态并发送
+     * Send current state
+     * Get current active editor state and send
      */
     sendCurrentState(isActive: boolean) {
         const currentState = this.getCurrentActiveEditorState(isActive);
         if (currentState) {
             this.updateState(currentState);
-            this.logger.info(`发送当前状态: ${currentState.filePath}`);
+            this.logger.info(`Sent current state: ${currentState.filePath}`);
         }
     }
 
     /**
-     * 获取当前活跃编辑器的状态
+     * Get current active editor state
      */
     getCurrentActiveEditorState(isActive: boolean): EditorState | null {
         try {
@@ -194,7 +194,7 @@ export class EditorStateManager {
 
             const position = FileUtils.getEditorCursorPosition(activeEditor);
 
-            // 获取选中范围坐标
+            // Get selection range coordinates
             const selectionCoordinates = FileUtils.getSelectionCoordinates(activeEditor);
 
             return new EditorState(
@@ -212,24 +212,24 @@ export class EditorStateManager {
                 selectionCoordinates?.endColumn
             );
         } catch (error) {
-            this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);
+            this.logger.warn('Failed to get current active editor state:', error as Error);
             return null;
         }
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     dispose() {
-        this.logger.info("开始清理编辑器状态管理器资源")
+        this.logger.info("Starting to clean up editor state manager resources")
 
-        // 清理所有防抖定时器
+        // Clear all debounce timers
         for (const [filePath, timer] of this.debounceTimers) {
             clearTimeout(timer);
-            this.logger.debug(`清理防抖定时器: ${filePath}`);
+            this.logger.debug(`Cleared debounce timer: ${filePath}`);
         }
         this.debounceTimers.clear();
 
-        this.logger.info("编辑器状态管理器资源清理完成")
+        this.logger.info("Editor state manager resource cleanup completed")
     }
 }

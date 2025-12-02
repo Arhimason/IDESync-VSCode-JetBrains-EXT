@@ -10,8 +10,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.messages.MessageBusConnection
 
 /**
- * 事件监听管理器
- * 统一管理各种编辑器事件监听器，将事件转换为标准的操作任务
+ * Event listener manager
+ * Unified management of various editor event listeners, converting events to standard operation tasks
  */
 class EventListenerManager(
     private val project: Project,
@@ -21,30 +21,30 @@ class EventListenerManager(
 ) {
     private val log: Logger = Logger.getInstance(EventListenerManager::class.java)
 
-    // 全局唯一的光标监听器引用
+    // Global unique cursor listener reference
     private var currentCaretListener: com.intellij.openapi.editor.event.CaretListener? = null
 
-    // 全局唯一的选中监听器引用
+    // Global unique selection listener reference
     private var currentSelectionListener: com.intellij.openapi.editor.event.SelectionListener? = null
     private var currentEditor: Editor? = null
     private var messageBusConnection: MessageBusConnection? = null
 
 
     /**
-     * 设置编辑器监听器
+     * Setup editor listeners
      */
     fun setupEditorListeners() {
-        log.info("设置编辑器监听器")
+        log.info("Setting up editor listeners")
         messageBusConnection = project.messageBus.connect();
         messageBusConnection?.subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
                     if (!fileUtils.isRegularFile(file)) {
-                        log.info("事件-文件打开: ${file.path} - 非常规文件，已忽略")
+                        log.info("Event - File opened: ${file.path} - Irregular file, ignored")
                         return
                     }
-                    log.info("事件-文件打开: ${file.path}")
+                    log.info("Event - File opened: ${file.path}")
                     val fileEditor = source.getSelectedEditor(file)
                     val editor = if (fileEditor is com.intellij.openapi.fileEditor.TextEditor) {
                         fileEditor.editor
@@ -55,7 +55,7 @@ class EventListenerManager(
                         val state = editorStateManager.createEditorState(
                             it, file, ActionType.OPEN, windowStateManager.isWindowActive()
                         )
-                        log.info("准备发送打开消息: $state")
+                        log.info("Preparing to send open message: $state")
                         editorStateManager.updateState(state)
                         setupCaretListener(it)
                         setupSelectionListener(it)
@@ -65,31 +65,31 @@ class EventListenerManager(
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
                     if (!fileUtils.isRegularFile(file)) {
-                        log.info("事件-文件关闭: ${file.path} - 非常规文件，已忽略")
+                        log.info("Event - File closed: ${file.path} - Irregular file, ignored")
                         return
                     }
-                    log.info("事件-文件关闭: ${file.path}")
+                    log.info("Event - File closed: ${file.path}")
 
-                    // 检查文件是否在其他编辑器中仍然打开
+                    // Check if file is still open in other editors
                     val isStillOpen = fileUtils.isFileOpenInOtherTabs(file)
                     if (isStillOpen) {
-                        log.info("文件在其他编辑器中仍然打开，跳过关闭消息: ${file.path}")
+                        log.info("File is still open in other editors, skipping close message: ${file.path}")
                         return
                     }
 
-                    // 创建关闭状态并发送到队列（无需依赖editor对象）
+                    // Create close state and send to queue (no dependency on editor object)
                     val state = editorStateManager.createCloseState(file.path, windowStateManager.isWindowActive())
-                    log.info("准备发送关闭消息: $state")
+                    log.info("Preparing to send close message: $state")
                     editorStateManager.updateState(state)
                 }
 
                 override fun selectionChanged(event: FileEditorManagerEvent) {
                     if (event.newFile != null) {
                         if (!fileUtils.isRegularFile(event.newFile!!)) {
-                            log.info("事件-文件改变: ${event.newFile!!.path} - 非常规文件，已忽略")
+                            log.info("Event - File changed: ${event.newFile!!.path} - Irregular file, ignored")
                             return
                         }
-                        log.info("事件-文件改变: ${event.newFile!!.path}")
+                        log.info("Event - File changed: ${event.newFile!!.path}")
                         val fileEditor = event.newEditor
                         val editor = if (fileEditor is com.intellij.openapi.fileEditor.TextEditor) {
                             fileEditor.editor
@@ -100,7 +100,7 @@ class EventListenerManager(
                             val state = editorStateManager.createEditorState(
                                 it, event.newFile!!, ActionType.OPEN, windowStateManager.isWindowActive()
                             )
-                            log.info("准备发送打开消息: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+                            log.info("Preparing to send open message: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
                             editorStateManager.updateState(state)
                             setupCaretListener(it)
                             setupSelectionListener(it)
@@ -110,35 +110,35 @@ class EventListenerManager(
                 }
             }
         )
-        log.info("编辑器监听器设置完成")
+        log.info("Editor listeners setup completed")
     }
 
 
     /**
-     * 统一处理编辑器光标和选中事件
-     * @param editor 编辑器实例
-     * @param eventType 事件类型（"光标改变" 或 "选中改变"）
+     * Unified handling of editor cursor and selection events
+     * @param editor Editor instance
+     * @param eventType Event type ("cursor changed" or "selection changed")
      */
     private fun handleEditorPositionOrSelectionEvent(editor: Editor, eventType: String) {
-        log.info("事件-$eventType")
+        log.info("Event-$eventType")
 
-        // 动态获取当前真正的文件
+        // Dynamically get current actual file
         val currentFile = editor.virtualFile
         if (currentFile == null) {
-            log.warn("事件-$eventType：无法获取当前文件，跳过处理")
+            log.warn("Event-$eventType: Unable to get current file, skipping processing")
             return
         }
         if (!fileUtils.isRegularFile(currentFile)) {
-            log.info("事件-$eventType: ${currentFile.path} - 非常规文件，已忽略")
+            log.info("Event-$eventType: ${currentFile.path} - Irregular file, ignored")
             return
         }
 
-        // 获取光标位置信息
+        // Get cursor position information
         val caretModel = editor.caretModel
         val logicalPosition = caretModel.logicalPosition
-        var logMessage = "事件-$eventType: ${currentFile.path}，${LogFormatter.cursorLog(logicalPosition.line, logicalPosition.column)}"
+        var logMessage = "Event-$eventType: ${currentFile.path}，${LogFormatter.cursorLog(logicalPosition.line, logicalPosition.column)}"
 
-        // 添加选中信息（无论事件类型）
+        // Add selection information (regardless of event type)
         val selectionModel = editor.selectionModel
         val hasSelection = selectionModel.hasSelection()
 
@@ -155,90 +155,90 @@ class EventListenerManager(
         val state = editorStateManager.createEditorState(
             editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
         )
-        log.info("准备发送导航消息: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+        log.info("Preparing to send navigation message: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
         editorStateManager.debouncedUpdateState(state)
     }
 
 
     /**
-     * 设置光标监听器
-     * 全局唯一，每次设置新监听器时会销毁之前的监听器
+     * Setup cursor listener
+     * Globally unique, destroys previous listener when setting up new one
      */
     private fun setupCaretListener(editor: Editor) {
-        log.info("开始设置光标监听器")
+        log.info("Starting to setup cursor listener")
 
-        // 销毁之前的光标监听器
+        // Destroy previous cursor listener
         destroyCurrentCaretListener()
 
-        // 创建新的光标监听器
+        // Create new cursor listener
         val newCaretListener = object : com.intellij.openapi.editor.event.CaretListener {
             override fun caretPositionChanged(event: com.intellij.openapi.editor.event.CaretEvent) {
-                handleEditorPositionOrSelectionEvent(event.editor, "光标改变")
+                handleEditorPositionOrSelectionEvent(event.editor, "cursor changed")
             }
         }
 
-        // 添加新的监听器
+        // Add new listener
         editor.caretModel.addCaretListener(newCaretListener)
 
-        // 保存引用以便后续管理
+        // Save reference for subsequent management
         currentCaretListener = newCaretListener
 
-        log.info("光标监听器设置完成")
+        log.info("Cursor listener setup completed")
     }
 
     /**
-     * 设置选中监听器
-     * 全局唯一，每次设置新监听器时会销毁之前的监听器
+     * Setup selection listener
+     * Globally unique, destroys previous listener when setting up new one
      */
     private fun setupSelectionListener(editor: Editor) {
-        log.info("开始设置选中监听器")
+        log.info("Starting to setup selection listener")
 
-        // 销毁之前的选中监听器
+        // Destroy previous selection listener
         destroyCurrentSelectionListener()
 
-        // 创建新的选中监听器
+        // Create new selection listener
         val newSelectionListener = object : com.intellij.openapi.editor.event.SelectionListener {
             override fun selectionChanged(event: com.intellij.openapi.editor.event.SelectionEvent) {
-                handleEditorPositionOrSelectionEvent(event.editor, "选中改变")
+                handleEditorPositionOrSelectionEvent(event.editor, "selection changed")
             }
         }
 
-        // 添加新的监听器
+        // Add new listener
         editor.selectionModel.addSelectionListener(newSelectionListener)
 
-        // 保存引用以便后续管理
+        // Save reference for subsequent management
         currentSelectionListener = newSelectionListener
 
-        log.info("选中监听器设置完成")
+        log.info("Selection listener setup completed")
     }
 
     /**
-     * 销毁当前的光标监听器
+     * Destroy current cursor listener
      */
     private fun destroyCurrentCaretListener() {
         if (currentCaretListener != null && currentEditor != null) {
-            log.info("销毁之前的光标监听器")
+            log.info("Destroying previous cursor listener")
             try {
                 currentEditor!!.caretModel.removeCaretListener(currentCaretListener!!)
-                log.info("光标监听器销毁成功")
+                log.info("Cursor listener destroyed successfully")
             } catch (e: Exception) {
-                log.warn("销毁光标监听器时出现异常: ${e.message}")
+                log.warn("Exception occurred when destroying cursor listener: ${e.message}")
             }
             currentCaretListener = null
         }
     }
 
     /**
-     * 销毁当前的选中监听器
+     * Destroy current selection listener
      */
     private fun destroyCurrentSelectionListener() {
         if (currentSelectionListener != null && currentEditor != null) {
-            log.info("销毁之前的选中监听器")
+            log.info("Destroying previous selection listener")
             try {
                 currentEditor!!.selectionModel.removeSelectionListener(currentSelectionListener!!)
-                log.info("选中监听器销毁成功")
+                log.info("Selection listener destroyed successfully")
             } catch (e: Exception) {
-                log.warn("销毁选中监听器时出现异常: ${e.message}")
+                log.warn("Exception occurred when destroying selection listener: ${e.message}")
             }
             currentSelectionListener = null
         }
@@ -246,15 +246,15 @@ class EventListenerManager(
 
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     fun dispose() {
-        log.info("开始清理EventListenerManager资源")
+        log.info("Starting to clean up EventListenerManager resources")
         messageBusConnection?.disconnect()
         messageBusConnection?.dispose()
         destroyCurrentCaretListener()
         destroyCurrentSelectionListener()
         currentEditor = null
-        log.info("EventListenerManager资源清理完成")
+        log.info("EventListenerManager resource cleanup completed")
     }
 }

@@ -15,8 +15,8 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
 /**
- * WebSocket连接管理器
- * 负责WebSocket连接的建立、维护、重连和状态管理
+ * WebSocket connection manager
+ * Responsible for WebSocket connection establishment, maintenance, reconnection and state management
  */
 class WebSocketConnectionManager(
     private val project: Project,
@@ -29,17 +29,17 @@ class WebSocketConnectionManager(
     private val autoReconnect = AtomicBoolean(false)
     private var connectionCallback: ConnectionCallback? = null
 
-    // 同步锁，保护关键操作的线程安全
+    // Synchronization lock, protecting thread safety of critical operations
     private val connectionLock = ReentrantLock()
 
-    // 循环线程池和定时器
+    // Loop thread pool and timer
     private val scheduleExecutorService: ExecutorService = Executors.newSingleThreadExecutor { r ->
         val thread = Thread(r, "WebSocket-Schedule-Connection-Worker")
         thread.isDaemon = true
         thread
     }
 
-    // 线程池和定时器
+    // Thread pool and timer
     private val executorService: ExecutorService = Executors.newSingleThreadExecutor { r ->
         val thread = Thread(r, "WebSocket-Connection-Worker")
         thread.isDaemon = true
@@ -47,7 +47,7 @@ class WebSocketConnectionManager(
     }
 
 
-    // 配置参数
+    // Configuration parameters
     private val reconnectDelayMs = 5000L
 
 
@@ -61,8 +61,8 @@ class WebSocketConnectionManager(
     }
 
     /**
-     * 切换自动重连状态
-     * 使用锁保护状态切换的原子性，避免竞态条件
+     * Toggle auto reconnect status
+     * Use lock to protect atomicity of status switching, avoiding race conditions
      */
     fun toggleAutoReconnect() {
         connectionLock.lock()
@@ -70,20 +70,20 @@ class WebSocketConnectionManager(
             val currentState = autoReconnect.get()
             val newState = !currentState
 
-            // 使用 compareAndSet 确保状态变更的原子性
+            // Use compareAndSet to ensure atomicity of status change
             if (!autoReconnect.compareAndSet(currentState, newState)) {
-                log.warn("自动重连状态已被其他线程修改，操作取消")
+                log.warn("Auto reconnect status has been modified by another thread, operation cancelled")
                 return
             }
 
-            log.info("自动重连状态切换为: ${if (newState) "开启" else "关闭"}")
+            log.info("Auto reconnect status toggled to: ${if (newState) "enabled" else "disabled"}")
 
             if (!newState) {
                 disconnectAndCleanup()
-                log.info("同步已关闭，连接已断开")
+                log.info("Sync disabled, connection disconnected")
             } else {
                 connectWebSocket()
-                log.info("同步已开启，开始连接...")
+                log.info("Sync enabled, starting connection...")
             }
         } finally {
             connectionLock.unlock()
@@ -92,7 +92,7 @@ class WebSocketConnectionManager(
 
 
     /**
-     * 循环创建WebSocket客户端并尝试连接
+     * Loop to create WebSocket client and attempt connection
      */
     private fun loopConnectWebSocket() {
         scheduleExecutorService.submit {
@@ -119,12 +119,12 @@ class WebSocketConnectionManager(
                 if (!connectionState.compareAndSet(ConnectionState.DISCONNECTED, ConnectionState.CONNECTING)) {
                     return@submit
                 }
-                // 断开并清理
+                // Disconnect and clean up
                 cleanUp()
 
                 ApplicationManager.getApplication().invokeLater { connectionCallback?.onReconnecting() }
                 val port = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
-                log.info("尝试连接到VSCode，端口: $port")
+                log.info("Attempting to connect to VSCode, port: $port")
 
                 webSocket = createWebSocketClient(port)
                 webSocket?.connectionLostTimeout = 0
@@ -134,11 +134,11 @@ class WebSocketConnectionManager(
                     handleConnectionError()
                 }
             } catch (e: InterruptedException) {
-                log.warn("线程被中断")
+                log.warn("Thread was interrupted")
                 return@submit
             } catch (e: Exception) {
                 try {
-                    log.warn("WebSocket服务器错误: ${e.message}", e)
+                    log.warn("WebSocket server error: ${e.message}", e)
                     handleConnectionError()
                 } catch (e: Exception) {
 
@@ -148,17 +148,17 @@ class WebSocketConnectionManager(
     }
 
     /**
-     * 创建WebSocket客户端
+     * Create WebSocket client
      */
     private fun createWebSocketClient(port: Int): WebSocketClient {
         return object : WebSocketClient(URI("ws://localhost:${port}/jetbrains")) {
             override fun onOpen(handshakedata: ServerHandshake?) {
-                log.info("成功连接到VSCode，端口: $port")
+                log.info("Successfully connected to VSCode, port: $port")
                 connectionState.set(ConnectionState.CONNECTED)
                 ApplicationManager.getApplication().invokeLater {
                     connectionCallback?.onConnected()
-                    log.info("JetBrains IDE客户端已连接")
-                    showNotification("已连接到VSCode", NotificationType.INFORMATION)
+                    log.info("JetBrains IDE client connected")
+                    showNotification("Connected to VSCode", NotificationType.INFORMATION)
                 }
             }
 
@@ -167,55 +167,55 @@ class WebSocketConnectionManager(
             }
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
-                log.info("与VSCode连接断开 - 代码: $code, 原因: $reason, 远程断开: $remote")
-                showNotification("与VSCode连接断开", NotificationType.WARNING)
+                log.info("Disconnected from VSCode - Code: $code, Reason: $reason, Remote: $remote")
+                showNotification("Disconnected from VSCode", NotificationType.WARNING)
                 handleConnectionError()
             }
 
             override fun onError(ex: Exception?) {
-                log.warn("WebSocket连接错误: ${ex?.message}")
+                log.warn("WebSocket connection error: ${ex?.message}")
                 handleConnectionError()
             }
         }
     }
 
     /**
-     * 发送消息
+     * Send message
      */
     fun sendMessage(message: String): Boolean {
         if (isConnected().not() || isAutoReconnect().not()) {
-            log.warn("当前未连接，丢弃消息: $message")
+            log.warn("Currently not connected, discarding message: $message")
             return false
         }
         return webSocket?.let { client ->
             if (client.isOpen) {
                 try {
                     if (!isConnected()) {
-                        log.info("当前未连接，丢弃消息: $message")
+                        log.info("Currently not connected, discarding message: $message")
                     }
                     client.send(message)
                     true
                 } catch (e: Exception) {
-                    log.warn("发送消息失败: ${e.message}", e)
+                    log.warn("Failed to send message: ${e.message}", e)
                     false
                 }
             } else {
-                log.warn("WebSocket未连接，状态: ${client.readyState}")
+                log.warn("WebSocket not connected, status: ${client.readyState}")
                 if (connectionState.get() != ConnectionState.CONNECTING) {
                     connectWebSocket()
                 }
                 false
             }
         } ?: run {
-            log.warn("WebSocket客户端为空，尝试重连...")
+            log.warn("WebSocket client is null, attempting to reconnect...")
             connectWebSocket()
             false
         }
     }
 
     /**
-     * 处理连接错误
-     * 使用锁保护状态变更，确保错误处理的原子性
+     * Handle connection error
+     * Use lock to protect state changes, ensuring atomicity of error handling
      */
     private fun handleConnectionError() {
         connectionState.set(ConnectionState.DISCONNECTED)
@@ -223,14 +223,14 @@ class WebSocketConnectionManager(
             connectionCallback?.onDisconnected()
         }
         Thread.sleep(reconnectDelayMs)
-        // 尝试重新连接
+        // Attempt to reconnect
         connectWebSocket()
     }
 
 
     /**
-     * 断开连接并清理资源
-     * 使用锁保护清理操作的原子性
+     * Disconnect and clean up resources
+     * Use lock to protect atomicity of cleanup operations
      */
     fun disconnectAndCleanup() {
         cleanUp()
@@ -247,7 +247,7 @@ class WebSocketConnectionManager(
             webSocket?.let { client ->
                 if (client.isOpen) {
                     client.close()
-                    log.info("WebSocket连接已关闭")
+                    log.info("WebSocket connection closed")
                 }
                 webSocket = null
             }
@@ -257,16 +257,16 @@ class WebSocketConnectionManager(
     }
 
     /**
-     * 重启连接
-     * 通过调用线程安全的方法来实现重启
+     * Restart connection
+     * Implement restart by calling thread-safe methods
      */
     fun restartConnection() {
-        log.info("手动重启连接")
+        log.info("Manually restarting connection")
         connectWebSocket()
     }
 
     /**
-     * 显示通知
+     * Show notification
      */
     private fun showNotification(message: String, type: NotificationType) {
         NotificationGroupManager.getInstance()
@@ -275,7 +275,7 @@ class WebSocketConnectionManager(
             .notify(project)
     }
 
-    // 状态查询方法
+    // Status query methods
     fun isConnected(): Boolean = connectionState.get() == ConnectionState.CONNECTED
     fun isAutoReconnect(): Boolean = autoReconnect.get()
     fun isConnecting(): Boolean = connectionState.get() == ConnectionState.CONNECTING
@@ -283,10 +283,10 @@ class WebSocketConnectionManager(
     fun getConnectionState(): ConnectionState = connectionState.get()
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     fun dispose() {
-        log.info("开始清理WebSocket连接管理器资源")
+        log.info("Starting to clean up WebSocket connection manager resources")
 
         autoReconnect.set(false)
         executorService.shutdown()
@@ -307,6 +307,6 @@ class WebSocketConnectionManager(
         }
 
         disconnectAndCleanup()
-        log.info("WebSocket连接管理器资源清理完成")
+        log.info("WebSocket connection manager resource cleanup completed")
     }
 }

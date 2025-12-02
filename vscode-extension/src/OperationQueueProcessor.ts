@@ -1,64 +1,63 @@
-import {EditorState, MessageWrapper} from './Type';
+import {EditorState, MessageWrapper, MessageSender} from './Type';
 import {Logger} from './Logger';
-import {MulticastManager} from './MulticastManager';
 import {LocalIdentifierManager} from './LocalIdentifierManager';
 
 /**
- * 操作队列处理器
- * 确保操作的原子性和顺序性
- * 包含队列容量管理和操作添加逻辑
+ * Operation queue processor
+ * Ensures atomicity and order of operations
+ * Includes queue capacity management and operation addition logic
  */
 export class OperationQueueProcessor {
     private logger: Logger;
-    private multicastManager: MulticastManager;
+    private messageSender: MessageSender;
     private processingInterval: NodeJS.Timeout | null = null;
 
-    // 内部队列管理
+    // Internal queue management
     private operationQueue: EditorState[] = [];
     private maxQueueSize = 100;
 
-    // 处理状态
+    // Processing state
     private isShutdown: boolean = false;
 
     constructor(
         logger: Logger,
-        multicastManager: MulticastManager,
+        messageSender: MessageSender,
     ) {
         this.logger = logger;
-        this.multicastManager = multicastManager;
+        this.messageSender = messageSender;
 
-        // 在构造函数中自动启动队列处理器
+        // Automatically start queue processor in constructor
         this.start();
     }
 
     /**
-     * 添加操作到队列
-     * 包含队列容量管理逻辑
+     * Add operation to queue
+     * Includes queue capacity management logic
      */
     addOperation(state: EditorState) {
         if (this.operationQueue.length >= this.maxQueueSize) {
             this.operationQueue.shift();
-            this.logger.warn('操作队列已满，移除最旧的操作');
+            this.logger.warn('Operation queue is full, removing oldest operation');
         }
 
         this.operationQueue.push(state);
-        this.logger.info(`操作已推入队列：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
+        this.logger.info(`Operation pushed to queue: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}`)
     }
 
     /**
-     * 启动队列处理器
+     * Start queue processor
      */
     start() {
         if (!this.isShutdown) {
-            this.logger.info('启动VSCode队列处理器');
+            this.logger.info('Starting VSCode queue processor');
             this.processingInterval = setInterval(() => {
                 this.processQueue();
-            }, 100); // 每100ms检查一次队列
+            }, 100); // Check queue every 100ms
         }
     }
 
     /**
-     * 处理操作队列
+     * Process operation queue
      */
     async processQueue() {
         if (this.isShutdown) {
@@ -73,27 +72,27 @@ export class OperationQueueProcessor {
                 }
                 await this.processOperation(state);
 
-                // 避免过于频繁的操作
+                // Avoid overly frequent operations
                 await new Promise(resolve => setTimeout(resolve, 50));
             } catch (error) {
-                this.logger.warn(`队列处理器发生错误：`, error as Error);
+                this.logger.warn(`Queue processor error occurred:`, error as Error);
             }
         }
     }
 
     /**
-     * 处理单个操作
+     * Process single operation
      */
     private async processOperation(state: EditorState) {
         try {
             this.sendStateUpdate(state);
         } catch (error) {
-            this.logger.warn('处理操作失败:', error as Error);
+            this.logger.warn('Failed to process operation:', error as Error);
         }
     }
 
     /**
-     * 发送状态更新
+     * Send state update
      */
     private sendStateUpdate(state: EditorState) {
         const messageWrapper = MessageWrapper.create(
@@ -101,20 +100,20 @@ export class OperationQueueProcessor {
             state
         );
 
-        const success = this.multicastManager.sendMessage(messageWrapper);
+        const success = this.messageSender.sendMessage(messageWrapper);
         if (success) {
-            this.logger.info(`✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
+            this.logger.info(`✅ Sent message: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}`)
         } else {
-            this.logger.info(`❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
+            this.logger.info(`❌ Failed to send message: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}`)
         }
     }
 
 
     /**
-     * 停止队列处理器
+     * Stop queue processor
      */
     dispose() {
-        this.logger.info('开始关闭VSCode队列处理器');
+        this.logger.info('Starting to shut down VSCode queue processor');
 
         this.isShutdown = true;
 
@@ -123,9 +122,9 @@ export class OperationQueueProcessor {
             this.processingInterval = null;
         }
 
-        // 清理队列
+        // Clear queue
         this.operationQueue.length = 0;
 
-        this.logger.info('VSCode队列处理器已关闭');
+        this.logger.info('VSCode queue processor has been shut down');
     }
 }

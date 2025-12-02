@@ -6,30 +6,30 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 本机标识管理器
- * 负责生成和管理本机唯一标识，供各个组件使用
- * 支持多项目实例，通过项目路径区分不同的IDEA项目窗口
- * 支持VSCode多版本，通过PID区分同一项目的不同进程
+ * Local identifier manager
+ * Responsible for generating and managing local unique identifiers for use by various components
+ * Supports multi-project instances, distinguishing different IDEA project windows through project paths
+ * Supports VSCode multi-version, distinguishing different processes of the same project through PID
  */
 class LocalIdentifierManager(private val project: Project) {
 
     /**
-     * 本机唯一标识
-     * 在首次访问时生成，格式: hostname-projectHash-pid
+     * Local unique identifier
+     * Generated on first access, format: hostname-projectHash-pid
      */
     val identifier: String by lazy { generateLocalIdentifier() }
 
     /**
-     * 项目专属的消息序列号生成器
-     * 解决多项目实例共享全局序列号的问题
+     * Project-specific message sequence number generator
+     * Solves the problem of multi-project instances sharing global sequence numbers
      */
     private val messageSequence = AtomicLong(0)
 
     /**
-     * 生成本机唯一标识
-     * 格式: hostname-projectHash-pid
-     * - projectHash: 解决IDEA多项目窗口PID相同的问题
-     * - pid: 解决VSCode多版本同项目PID不同的问题
+     * Generate local unique identifier
+     * Format: hostname-projectHash-pid
+     * - projectHash: Solves the problem of IDEA multi-project windows having the same PID
+     * - pid: Solves the problem of VSCode multi-version having different PIDs for the same project
      */
     private fun generateLocalIdentifier(): String {
         return try {
@@ -43,26 +43,26 @@ class LocalIdentifierManager(private val project: Project) {
     }
 
     /**
-     * 生成项目哈希值
-     * 基于项目路径生成短哈希，用于区分不同项目实例
+     * Generate project hash value
+     * Generate short hash based on project path, used to distinguish different project instances
      */
     private fun generateProjectHash(): String {
         return try {
             val path = project.basePath ?: "unknown-project"
             val md = MessageDigest.getInstance("MD5")
             val hashBytes = md.digest(path.toByteArray())
-            // 取前3字节（6位十六进制字符）作为项目哈希
+            // Take first 3 bytes (6 hexadecimal characters) as project hash
             hashBytes.take(3).joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
-            // 如果哈希生成失败，使用时间戳后6位作为后备方案
+            // If hash generation fails, use last 6 digits of timestamp as fallback
             System.currentTimeMillis().toString().takeLast(6)
         }
     }
 
     /**
-     * 生成项目专属的消息ID
-     * 格式: {localIdentifier}-{sequence}-{timestamp}
-     * 每个项目实例都有独立的序列号，避免多实例冲突
+     * Generate project-specific message ID
+     * Format: {localIdentifier}-{sequence}-{timestamp}
+     * Each project instance has independent sequence number, avoiding multi-instance conflicts
      */
     fun generateMessageId(): String {
         val sequence = messageSequence.incrementAndGet()

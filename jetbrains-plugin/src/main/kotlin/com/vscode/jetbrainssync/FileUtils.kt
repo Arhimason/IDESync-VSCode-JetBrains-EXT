@@ -14,13 +14,13 @@ import com.intellij.openapi.wm.IdeFocusManager
 import java.io.File
 
 /**
- * 文件工具类
- * 提供文件操作相关的工具方法
+ * File utility class
+ * Provides file operation related utility methods
  */
 class FileUtils(private val project: Project, private val log: Logger) {
 
     /**
-     * 检查文件是否在其他编辑器中仍然打开
+     * Check if file is still open in other editors
      */
     fun isFileOpenInOtherTabs(file: VirtualFile): Boolean {
         val fileEditorManager = FileEditorManager.getInstance(project)
@@ -28,28 +28,28 @@ class FileUtils(private val project: Project, private val log: Logger) {
     }
 
     /**
-     * 判断是否为常规文件编辑器（只允许常规文件系统）
+     * Determine if it's a regular file editor (only allow regular file systems)
      */
     fun isRegularFile(virtualFile: VirtualFile): Boolean {
         val fileSystem = virtualFile.fileSystem.protocol
 
-        // 白名单机制：只允许常规文件系统协议
+        // Whitelist mechanism: only allow regular file system protocols
         val allowedFileSystems = listOf(
-            "file"       // 本地文件系统
+            "file"       // Local file system
         )
 
         return allowedFileSystems.contains(fileSystem)
     }
 
     /**
-     * 获取当前所有打开的文件路径
-     * 只返回常规文件编辑器，过滤掉特殊标签窗口
+     * Get all currently opened file paths
+     * Only return regular file editors, filter out special tab windows
      */
     fun getAllOpenedFiles(): List<String> {
         val fileEditorManager = FileEditorManager.getInstance(project)
         return fileEditorManager.openFiles
             .filter { virtualFile ->
-                // 只保留常规文件编辑器，过滤掉所有特殊标签窗口
+                // Only keep regular file editors, filter out all special tab windows
                 isRegularFile(virtualFile)
             }
             .map { it.path }
@@ -57,27 +57,27 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
 
     /**
-     * 从文件路径提取文件名
-     * @param filePath 文件路径
-     * @return 文件名
+     * Extract filename from file path
+     * @param filePath File path
+     * @return Filename
      */
     fun extractFileName(filePath: String): String {
         return File(filePath).name
     }
 
     /**
-     * 获取编辑器的文件路径
-     * @param virtualFile 虚拟文件
-     * @return 文件路径
+     * Get file path of editor
+     * @param virtualFile Virtual file
+     * @return File path
      */
     fun getVirtualFilePath(virtualFile: VirtualFile): String {
         return virtualFile.path
     }
 
     /**
-     * 获取编辑器的光标位置
-     * @param editor 文本编辑器
-     * @return 光标位置 Pair<行号, 列号>
+     * Get cursor position of editor
+     * @param editor Text editor
+     * @return Cursor position Pair<line number, column number>
      */
     fun getEditorCursorPosition(editor: Editor): Pair<Int, Int> {
         val position = editor.caretModel.logicalPosition
@@ -85,9 +85,9 @@ class FileUtils(private val project: Project, private val log: Logger) {
     }
 
     /**
-     * 获取编辑器的选中范围坐标
-     * @param editor 文本编辑器
-     * @return 选中范围坐标 (startLine, startColumn, endLine, endColumn)，如果没有选中则返回null
+     * Get selection range coordinates of editor
+     * @param editor Text editor
+     * @return Selection range coordinates (startLine, startColumn, endLine, endColumn), return null if no selection
      */
     fun getSelectionCoordinates(editor: Editor): Quadruple<Int, Int, Int, Int>? {
         val selectionModel = editor.selectionModel
@@ -103,7 +103,7 @@ class FileUtils(private val project: Project, private val log: Logger) {
     }
 
     /**
-     * 四元组数据类，用于返回选中范围的四个坐标
+     * Quadruple data class, used to return four coordinates of selection range
      */
     data class Quadruple<out A, out B, out C, out D>(
         val first: A,
@@ -114,8 +114,8 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
 
     /**
-     * 获取当前选中的文件和编辑器
-     * @return Pair<TextEditor?, VirtualFile?> 编辑器和虚拟文件的组合
+     * Get currently selected file and editor
+     * @return Pair<TextEditor?, VirtualFile?> combination of editor and virtual file
      */
     fun getCurrentActiveEditorAndFile(): Pair<Editor?, VirtualFile?> {
         val fileEditorManager = FileEditorManager.getInstance(project)
@@ -128,122 +128,122 @@ class FileUtils(private val project: Project, private val log: Logger) {
     }
 
     /**
-     * 判断当前编辑器是否获取了焦点
-     * @return Boolean 当前编辑器是否获取了焦点
+     * Determine if current editor has focus
+     * @return Boolean whether current editor has focus
      */
     fun isEditorFocused(): Boolean {
         val focusManager = IdeFocusManager.getInstance(project)
         val focusOwner = focusManager.focusOwner
 
-        // 获取当前活跃的编辑器
+        // Get current active editor
         val (currentEditor, _) = getCurrentActiveEditorAndFile()
 
-        // 如果没有活跃的编辑器，则肯定没有焦点
+        // If there is no active editor, it definitely doesn't have focus
         if (currentEditor == null) {
             return false
         }
 
-        // 检查当前焦点组件是否属于编辑器
+        // Check if current focus component belongs to editor
         return focusOwner != null && currentEditor.contentComponent.isAncestorOf(focusOwner)
     }
 
     /**
-     * 根据文件路径关闭文件
-     * 如果直接路径匹配失败，会尝试通过文件名匹配
+     * Close file by file path
+     * If direct path matching fails, will try matching by filename
      */
     fun closeFileByPath(filePath: String) {
         try {
-            log.info("准备关闭文件: $filePath")
+            log.info("Preparing to close file: $filePath")
             val fileEditorManager = FileEditorManager.getInstance(project)
-            // 尝试通过文件路径匹配
+            // Try matching by file path
             val virtualFile = findFileByPath(filePath)
             virtualFile?.let { vFile ->
                 if (fileEditorManager.isFileOpen(vFile)) {
                     fileEditorManager.closeFile(vFile)
-                    log.info("✅ 成功关闭文件: $filePath")
+                    log.info("✅ Successfully closed file: $filePath")
                     return
                 } else {
-                    log.warn("⚠️ 文件未打开，无需关闭: $filePath")
+                    log.warn("⚠️ File not open, no need to close: $filePath")
                     return
                 }
             }
-            log.warn("❌ 文件未找到: $filePath")
+            log.warn("❌ File not found: $filePath")
         } catch (e: Exception) {
-            log.warn("关闭文件失败: $filePath - ${e.message}", e)
+            log.warn("Failed to close file: $filePath - ${e.message}", e)
         }
     }
 
     /**
-     * 根据文件路径打开文件
-     * 支持打开其他IDE中刚刚创建的新文件，通过刷新VFS缓存解决文件找不到的问题
-     * @param filePath 文件路径
-     * @param focusEditor 是否获取焦点，默认为true
-     * @return 返回打开的TextEditor，如果失败返回null
+     * Open file by file path
+     * Supports opening newly created files from other IDEs, solving file not found issues by refreshing VFS cache
+     * @param filePath File path
+     * @param focusEditor Whether to get focus, default is true
+     * @return Returns opened TextEditor, returns null if failed
      */
     fun openFileByPath(filePath: String, focusEditor: Boolean = true): TextEditor? {
         try {
-            log.info("准备打开文件: $filePath")
+            log.info("Preparing to open file: $filePath")
             val fileEditorManager = FileEditorManager.getInstance(project)
-            // 尝试通过文件路径查找虚拟文件
+            // Try finding virtual file by file path
             val virtualFile = findFileByPath(filePath)
             virtualFile?.let { vFile ->
-                // FileEditorManager.openFile() 会自动复用已打开的文件，无需手动检查
+                // FileEditorManager.openFile() will automatically reuse opened files, no need for manual check
                 val editors = fileEditorManager.openFile(vFile, focusEditor)
                 val editor = editors.firstOrNull() as? TextEditor
 
                 if (editor != null) {
-                    log.info("✅ 成功打开文件: $filePath")
+                    log.info("✅ Successfully opened file: $filePath")
                     return editor
                 } else {
-                    log.warn("❌ 无法获取文件编辑器: $filePath")
+                    log.warn("❌ Unable to get file editor: $filePath")
                     return null
                 }
             }
-            log.warn("❌ 文件未找到: $filePath")
+            log.warn("❌ File not found: $filePath")
             return null
         } catch (e: Exception) {
-            log.warn("打开文件失败: $filePath - ${e.message}", e)
+            log.warn("Failed to open file: $filePath - ${e.message}", e)
             return null
         }
     }
 
     /**
-     * 查找虚拟文件，如果找不到则刷新VFS缓存后重试
-     * 这个方法专门处理其他IDE中新创建文件的同步问题
-     * @param filePath 文件路径
-     * @return 虚拟文件对象，如果找不到返回null
+     * Find virtual file, refresh VFS cache and retry if not found
+     * This method specifically handles synchronization issues of newly created files in other IDEs
+     * @param filePath File path
+     * @return Virtual file object, returns null if not found
      */
     fun findFileByPath(filePath: String): VirtualFile? {
         val file = File(filePath)
         val fileSystem = LocalFileSystem.getInstance()
-        // 第一次尝试：直接查找
+        // First attempt: direct search
         var virtualFile = fileSystem.findFileByIoFile(file)
         if (virtualFile != null) {
-            log.info("直接找到文件: ${file.path}")
+            log.info("Found file directly: ${file.path}")
             return virtualFile
         }
 
-        log.info("文件未找到，开始刷新VFS缓存: ${file.path}")
+        log.info("File not found, starting VFS cache refresh: ${file.path}")
 
-        // 第二次尝试：刷新父目录后查找
+        // Second attempt: search after refreshing parent directory
         val parentFile = file.parentFile
         if (parentFile != null && parentFile.exists()) {
             val parentVirtualFile = fileSystem.findFileByIoFile(parentFile)
             parentVirtualFile?.refresh(false, true)
-            log.info("已刷新父目录VFS缓存: ${parentFile.path}")
+            log.info("Refreshed parent directory VFS cache: ${parentFile.path}")
 
             virtualFile = fileSystem.findFileByIoFile(file)
             if (virtualFile != null) {
-                log.info("刷新父目录后找到文件: ${file.path}")
+                log.info("Found file after refreshing parent directory: ${file.path}")
                 return virtualFile
             }
         }
 
-        // 第三次尝试：强制刷新整个文件系统后查找
-        log.info("刷新父目录无效，执行全局VFS刷新")
+        // Third attempt: search after forcing refresh of entire file system
+        log.info("Refreshing parent directory ineffective, performing global VFS refresh")
         fileSystem.refresh(false)
 
-        // 给文件系统一些时间来更新索引
+        // Give file system some time to update index
         try {
             Thread.sleep(100)
         } catch (e: InterruptedException) {
@@ -252,25 +252,25 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
         virtualFile = fileSystem.findFileByIoFile(file)
         if (virtualFile != null) {
-            log.info("全局刷新后找到文件: ${file.path}")
+            log.info("Found file after global refresh: ${file.path}")
             return virtualFile
         }
 
-        log.warn("所有刷新尝试均失败，文件可能不存在: ${file.path}")
+        log.warn("All refresh attempts failed, file may not exist: ${file.path}")
         return null
     }
 
 
     /**
-     * 统一处理选中和光标移动
-     * 先处理选中状态（有选中则设置选中，无选中则清除选中），然后确保光标位置在可视区域内
-     * @param textEditor 文本编辑器
-     * @param line 光标行号
-     * @param column 光标列号
-     * @param startLine 选中开始行号（可选）
-     * @param startColumn 选中开始列号（可选）
-     * @param endLine 选中结束行号（可选）
-     * @param endColumn 选中结束列号（可选）
+     * Unified handling of selection and cursor movement
+     * First handle selection state (set selection if there is one, clear selection if none), then ensure cursor position is within visible area
+     * @param textEditor Text editor
+     * @param line Cursor line number
+     * @param column Cursor column number
+     * @param startLine Selection start line number (optional)
+     * @param startColumn Selection start column number (optional)
+     * @param endLine Selection end line number (optional)
+     * @param endColumn Selection end column number (optional)
      */
     fun handleSelectionAndNavigate(
         textEditor: TextEditor,
@@ -282,14 +282,14 @@ class FileUtils(private val project: Project, private val log: Logger) {
         endColumn: Int? = null
     ) {
         try {
-            log.info("准备处理选中和光标导航：${LogFormatter.cursorLog(line, column)}，${LogFormatter.selectionLog(startLine, startColumn, endLine, endColumn)}")
+            log.info("Preparing to handle selection and cursor navigation: ${LogFormatter.cursorLog(line, column)}, ${LogFormatter.selectionLog(startLine, startColumn, endLine, endColumn)}")
 
             ApplicationManager.getApplication().runWriteAction {
                 val selectionModel = textEditor.editor.selectionModel
 
-                // 先处理选中状态
+                // First handle selection state
                 if (startLine != null && startColumn != null && endLine != null && endColumn != null) {
-                    // 有选中范围，设置选中
+                    // Has selection range, set selection
                     val startPosition = LogicalPosition(startLine, startColumn)
                     val endPosition = LogicalPosition(endLine, endColumn)
 
@@ -297,32 +297,32 @@ class FileUtils(private val project: Project, private val log: Logger) {
                         textEditor.editor.logicalPositionToOffset(startPosition),
                         textEditor.editor.logicalPositionToOffset(endPosition)
                     )
-                    log.info("✅ 成功设置选中范围: ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}")
+                    log.info("✅ Successfully set selection range: ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}")
                 } else {
-                    // 无选中范围，清除选中
+                    // No selection range, clear selection
                     selectionModel.removeSelection()
-                    log.info("✅ 成功清除选中状态，${LogFormatter.cursorLog(line, column)}")
+                    log.info("✅ Successfully cleared selection state, ${LogFormatter.cursorLog(line, column)}")
                 }
 
-                // 然后移动光标到指定位置
+                // Then move cursor to specified position
                 val cursorPosition = LogicalPosition(line, column)
                 textEditor.editor.caretModel.moveToLogicalPosition(cursorPosition)
-                log.info("✅ 成功移动光标到位置: ${LogFormatter.cursor(line, column)}")
+                log.info("✅ Successfully moved cursor to position: ${LogFormatter.cursor(line, column)}")
 
-                // 确保光标位置在可视区域内
+                // Ensure cursor position is within visible area
                 val visibleArea = textEditor.editor.scrollingModel.visibleArea
                 val targetPoint = textEditor.editor.logicalPositionToXY(cursorPosition)
 
                 if (!visibleArea.contains(targetPoint)) {
                     textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
-                    log.info("✅ 光标位置不可见，已执行滚动到: ${LogFormatter.cursor(line, column)}")
+                    log.info("✅ Cursor position not visible, scrolled to: ${LogFormatter.cursor(line, column)}")
                 } else {
-                    log.info("光标位置已在可视区域内，无需滚动")
+                    log.info("Cursor position already within visible area, no scrolling needed")
                 }
             }
-            log.info("✅ 选中和光标导航处理完成")
+            log.info("✅ Selection and cursor navigation processing completed")
         } catch (e: Exception) {
-            log.warn("❌ 处理选中和光标导航失败: ${LogFormatter.cursorLog(line, column)} - ${e.message}", e)
+            log.warn("❌ Failed to handle selection and cursor navigation: ${LogFormatter.cursorLog(line, column)} - ${e.message}", e)
         }
     }
 }

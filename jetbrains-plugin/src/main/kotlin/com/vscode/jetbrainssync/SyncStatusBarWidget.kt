@@ -23,7 +23,7 @@ class SyncStatusBarWidget(
     private var spinnerTimer: Timer? = null
     private var log: Logger = Logger.getInstance(SyncStatusBarWidget::class.java)
 
-    // 项目专属的动画索引，避免多实例冲突
+    // Project-specific animation index, avoiding multi-instance conflicts
     private var spinnerIndex = 0
 
     private val component = JLabel().apply {

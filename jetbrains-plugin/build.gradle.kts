@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("org.jetbrains.intellij") version "1.17.2"
     kotlin("jvm") version "1.9.22"
@@ -10,6 +13,12 @@ version = file("version.properties").readLines().first().substringAfter("=").tri
 repositories {
     mavenCentral()
     maven { url = uri("https://cache-redirector.jetbrains.com/intellij-dependencies") }
+}
+
+// Конфиг JVM-совместимости — всё под Java 17
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 // Configure Gradle IntelliJ Plugin
@@ -38,20 +47,35 @@ sourceSets {
 }
 
 tasks {
-    buildSearchableOptions {
-        enabled = false
+    // Гарантируем, что Java таргетит 17
+    withType<JavaCompile>().configureEach {
+        options.release.set(17)
     }
-    
+
+    // Гарантируем, что Kotlin таргетит 17
+    withType<KotlinCompile>().configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+            apiVersion = "1.8"
+            languageVersion = "1.8"
+            freeCompilerArgs = listOf("-Xjvm-default=all")
+        }
+    }
+
+    buildSearchableOptions {
+        isEnabled = false
+    }
+
     patchPluginXml {
         version.set("${project.version}")
         sinceBuild.set("233")
-        untilBuild.set(provider{null})
+        untilBuild.set(provider { null })
     }
 
     register("syncVersionToVSCode") {
         group = "build"
         description = "Synchronize version from version.properties to VSCode extension package.json"
-        
+
         doLast {
             val packageJsonFile = file("../vscode-extension/package.json")
             if (packageJsonFile.exists()) {
@@ -76,11 +100,11 @@ tasks {
         // Configure JVM arguments for running the plugin
         jvmArgs("-Xmx2g")
     }
-    
+
     processResources {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }
-    
+
     prepareSandbox {
         doLast {
             copy {
@@ -90,13 +114,4 @@ tasks {
             }
         }
     }
-    
-    compileKotlin {
-        kotlinOptions {
-            jvmTarget = "17"
-            apiVersion = "1.8"
-            languageVersion = "1.8"
-            freeCompilerArgs = listOf("-Xjvm-default=all")
-        }
-    }
-} 
+}

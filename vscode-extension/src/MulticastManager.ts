@@ -7,27 +7,27 @@ import {LocalIdentifierManager} from './LocalIdentifierManager';
 
 
 /**
- * 组播管理器
- * 负责UDP组播消息的发送和接收，实现去中心化的编辑器同步
+ * Multicast manager
+ * Responsible for sending and receiving UDP multicast messages, implementing decentralized editor synchronization
  */
 export class MulticastManager {
-    // === 核心依赖 ===
+    // === Core Dependencies ===
     private readonly logger: Logger;
     private readonly messageProcessor: MessageProcessor;
 
-    // === 网络配置 ===
-    private readonly multicastAddress = '224.0.0.1'; // 本地链路组播地址，仅本机通信
-    private multicastPort: number; // 组播端口（从配置读取）
-    private readonly maxMessageSize = 8192; // 最大消息大小（8KB）
+    // === Network Configuration ===
+    private readonly multicastAddress = '224.0.0.1'; // Local link multicast address, local machine communication only
+    private multicastPort: number; // Multicast port (read from configuration)
+    private readonly maxMessageSize = 8192; // Maximum message size (8KB)
 
-    // === 连接状态 ===
+    // === Connection State ===
     private socket: dgram.Socket | null = null;
     private connectionState: ConnectionState = ConnectionState.DISCONNECTED;
     private autoReconnect = false;
     private connectionCallback: ConnectionCallback | null = null;
     private isShutdown = false;
 
-    // === 定时器 ===
+    // === Timers ===
     private reconnectTimer: NodeJS.Timeout | null = null;
     private cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -36,15 +36,15 @@ export class MulticastManager {
         this.messageProcessor = messageProcessor;
         this.multicastPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
 
-        this.logger.info(`初始化组播管理器 - 地址: ${this.multicastAddress}:${this.multicastPort}`);
+        this.logger.info(`Initializing multicast manager - Address: ${this.multicastAddress}:${this.multicastPort}`);
 
         this.setupConfigurationListener();
     }
 
-    // ==================== 初始化相关方法 ====================
+    // ==================== Initialization Related Methods ====================
 
     /**
-     * 设置配置监听器
+     * Set up configuration listener
      */
     private setupConfigurationListener(): void {
         vscode.workspace.onDidChangeConfiguration((event) => {
@@ -55,12 +55,12 @@ export class MulticastManager {
     }
 
     /**
-     * 处理配置变更
+     * Handle configuration changes
      */
     private updateMulticastPort(): void {
         const newPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
         if (newPort !== this.multicastPort) {
-            this.logger.info(`组播端口配置变更: ${this.multicastPort} -> ${newPort}`);
+            this.logger.info(`Multicast port configuration changed: ${this.multicastPort} -> ${newPort}`);
             this.multicastPort = newPort;
 
             if (this.autoReconnect) {
@@ -69,70 +69,70 @@ export class MulticastManager {
         }
     }
 
-    // ==================== 公共接口方法 ====================
+    // ==================== Public Interface Methods ====================
 
     /**
-     * 设置连接状态回调
+     * Set connection state callback
      */
     setConnectionCallback(callback: ConnectionCallback): void {
         this.connectionCallback = callback;
     }
 
     /**
-     * 切换自动重连状态
+     * Toggle auto-reconnect state
      */
     toggleAutoReconnect(): void {
         this.autoReconnect = !this.autoReconnect;
-        this.logger.info(`组播同步状态切换为: ${this.autoReconnect ? '开启' : '关闭'}`);
+        this.logger.info(`Multicast sync state toggled to: ${this.autoReconnect ? 'enabled' : 'disabled'}`);
 
         if (!this.autoReconnect) {
             this.disconnectAndCleanup();
-            this.logger.info('组播同步已关闭');
+            this.logger.info('Multicast sync disabled');
         } else {
             this.connectMulticast();
-            this.logger.info('组播同步已开启，开始连接...');
+            this.logger.info('Multicast sync enabled, starting connection...');
         }
     }
 
     /**
-     * 重启连接
+     * Restart connection
      */
     restartConnection(): void {
-        this.logger.info('手动重启组播连接');
+        this.logger.info('Manually restarting multicast connection');
         this.disconnectAndCleanup();
         if (this.autoReconnect) {
             this.connectMulticast();
         }
     }
 
-    // ==================== 连接管理方法 ====================
+    // ==================== Connection Management Methods ====================
 
     /**
-     * 连接组播组
+     * Connect to multicast group
      */
     private connectMulticast(): void {
         if (this.isShutdown || !this.autoReconnect || this.connectionState !== ConnectionState.DISCONNECTED) {
             if (this.connectionState !== ConnectionState.DISCONNECTED) {
-                this.logger.info('连接状态不是DISCONNECTED，跳过连接尝试');
+                this.logger.info('Connection state is not DISCONNECTED, skipping connection attempt');
             }
             return;
         }
 
         this.setConnectionState(ConnectionState.CONNECTING);
-        this.logger.info('正在连接组播组...');
+        this.logger.info('Connecting to multicast group...');
 
         try {
             this.cleanUp();
             this.createSocket();
             this.bindSocket();
         } catch (error) {
-            this.logger.warn('创建组播连接失败:', error as Error);
+            this.logger.warn('Failed to create multicast connection:', error as Error);
             this.handleConnectionError();
         }
     }
 
     /**
-     * 创建UDP套接字
+     * Create UDP socket
      */
     private createSocket(): void {
         this.socket = dgram.createSocket({
@@ -144,13 +144,13 @@ export class MulticastManager {
     }
 
     /**
-     * 设置套接字事件处理器
+     * Set up socket event handlers
      */
     private setupSocketEventHandlers(): void {
         if (!this.socket) return;
 
         this.socket.on('error', (error: Error) => {
-            this.logger.warn('组播套接字错误:', error);
+            this.logger.warn('Multicast socket error:', error);
             this.handleConnectionError();
         });
 
@@ -164,38 +164,38 @@ export class MulticastManager {
     }
 
     /**
-     * 处理套接字监听事件
+     * Handle socket listening event
      */
     private handleSocketListening(): void {
         if (!this.socket) return;
 
         const address = this.socket.address();
         const isLoopback = address.address === '127.0.0.1' || address.address === '::1';
-        const addressType = isLoopback ? '回环地址' : '非回环地址';
-        this.logger.info(`组播套接字正在监听 ${addressType} ${address.address}:${address.port}`);
+        const addressType = isLoopback ? 'loopback address' : 'non-loopback address';
+        this.logger.info(`Multicast socket listening on ${addressType} ${address.address}:${address.port}`);
 
         this.joinMulticastGroup();
     }
 
     /**
-     * 加入组播组
+     * Join multicast group
      */
     private joinMulticastGroup(): void {
         if (!this.socket) return;
 
         try {
-            // 优先使用回环接口
+            // Prioritize using loopback interface
             this.socket.addMembership(this.multicastAddress, '127.0.0.1');
             this.setConnectionState(ConnectionState.CONNECTED);
-            this.logger.info(`成功加入组播组（回环接口）: ${this.multicastAddress}:${this.multicastPort}`);
+            this.logger.info(`Successfully joined multicast group (loopback interface): ${this.multicastAddress}:${this.multicastPort}`);
         } catch (error) {
-            this.logger.warn('加入组播组（回环接口）失败，尝试不指定接口:', error as Error);
+            this.logger.warn('Failed to join multicast group (loopback interface), trying without specifying interface:', error as Error);
             this.tryJoinWithDefaultInterface();
         }
     }
 
     /**
-     * 尝试使用默认接口加入组播组
+     * Try to join multicast group using default interface
      */
     private tryJoinWithDefaultInterface(): void {
         if (!this.socket) return;
@@ -203,66 +203,66 @@ export class MulticastManager {
         try {
             this.socket.addMembership(this.multicastAddress);
             this.setConnectionState(ConnectionState.CONNECTED);
-            this.logger.info(`成功加入组播组（默认接口）: ${this.multicastAddress}:${this.multicastPort}`);
+            this.logger.info(`Successfully joined multicast group (default interface): ${this.multicastAddress}:${this.multicastPort}`);
         } catch (error) {
-            this.logger.warn('加入组播组完全失败:', error as Error);
+            this.logger.warn('Failed to join multicast group completely:', error as Error);
             this.handleConnectionError();
         }
     }
 
     /**
-     * 绑定套接字到端口
+     * Bind socket to port
      */
     private bindSocket(): void {
         if (!this.socket) return;
 
         try {
-            // 优先绑定到回环地址
+            // Prioritize binding to loopback address
             this.socket.bind(this.multicastPort, '127.0.0.1', () => {
-                this.logger.info(`绑定到回环地址端口: 127.0.0.1:${this.multicastPort}`);
+                this.logger.info(`Bound to loopback address port: 127.0.0.1:${this.multicastPort}`);
             });
         } catch (bindError) {
-            this.logger.warn('绑定到回环地址失败，尝试绑定到默认地址:', bindError as Error);
+            this.logger.warn('Failed to bind to loopback address, trying to bind to default address:', bindError as Error);
             this.tryBindToDefaultAddress();
         }
     }
 
     /**
-     * 尝试绑定到默认地址
+     * Try to bind to default address
      */
     private tryBindToDefaultAddress(): void {
         if (!this.socket) return;
 
         try {
             this.socket.bind(this.multicastPort, () => {
-                this.logger.info(`绑定到默认地址端口: ${this.multicastPort}`);
+                this.logger.info(`Bound to default address port: ${this.multicastPort}`);
             });
         } catch (error) {
-            this.logger.warn('绑定端口完全失败:', error as Error);
+            this.logger.warn('Failed to bind port completely:', error as Error);
             this.handleConnectionError();
         }
     }
 
-    // ==================== 消息处理方法 ====================
+    // ==================== Message Processing Methods ====================
 
     /**
-     * 处理接收到的消息
+     * Handle received message
      */
     private handleReceivedMessage(message: string): void {
         try {
             this.messageProcessor.handleMessage(message);
         } catch (error) {
-            this.logger.warn('处理接收到的消息时发生错误:', error as Error);
+            this.logger.warn('Error occurred while processing received message:', error as Error);
         }
     }
 
 
     /**
-     * 发送消息到组播组
+     * Send message to multicast group
      */
     sendMessage(messageWrapper: MessageWrapper): boolean {
         if (!this.isConnected() || !this.autoReconnect) {
-            this.logger.warn(`当前未连接，丢弃消息: ${messageWrapper.toJsonString()}`);
+            this.logger.warn(`Currently not connected, discarding message: ${messageWrapper.toJsonString()}`);
             return false;
         }
 
@@ -271,7 +271,7 @@ export class MulticastManager {
             const messageBuffer = Buffer.from(messageString, 'utf8');
 
             if (messageBuffer.length > this.maxMessageSize) {
-                this.logger.warn(`消息过大，无法发送: ${messageBuffer.length} bytes`);
+                this.logger.warn(`Message too large, cannot send: ${messageBuffer.length} bytes`);
                 return false;
             }
 
@@ -283,10 +283,10 @@ export class MulticastManager {
                 this.multicastAddress,
                 (error: Error | null) => {
                     if (error) {
-                        this.logger.warn('发送组播消息失败:', error);
+                        this.logger.warn('Failed to send multicast message:', error);
                         this.handleConnectionError();
                     } else {
-                        this.logger.info(`发送组播消息内容: ${messageString}`);
+                        this.logger.info(`Sent multicast message content: ${messageString}`);
                     }
                 }
             );
@@ -294,16 +294,16 @@ export class MulticastManager {
             return true;
 
         } catch (error) {
-            this.logger.warn('发送组播消息失败:', error as Error);
+            this.logger.warn('Failed to send multicast message:', error as Error);
             this.handleConnectionError();
             return false;
         }
     }
 
-    // ==================== 状态管理方法 ====================
+    // ==================== State Management Methods ====================
 
     /**
-     * 处理连接错误
+     * Handle connection error
      */
     private handleConnectionError(): void {
         this.setConnectionState(ConnectionState.DISCONNECTED);
@@ -314,14 +314,14 @@ export class MulticastManager {
     }
 
     /**
-     * 安排重连
+     * Schedule reconnection
      */
     private scheduleReconnect(): void {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
         }
 
-        this.logger.info('将在5秒后尝试重新连接组播组...');
+        this.logger.info('Will attempt to reconnect to multicast group in 5 seconds...');
 
         this.reconnectTimer = setTimeout(() => {
             if (this.autoReconnect && !this.isShutdown) {
@@ -331,7 +331,7 @@ export class MulticastManager {
     }
 
     /**
-     * 设置连接状态并触发回调
+     * Set connection state and trigger callback
      */
     private setConnectionState(state: ConnectionState): void {
         if (this.connectionState === state) {
@@ -353,10 +353,10 @@ export class MulticastManager {
         }
     }
 
-    // ==================== 资源清理方法 ====================
+    // ==================== Resource Cleanup Methods ====================
 
     /**
-     * 断开连接并清理资源
+     * Disconnect and clean up resources
      */
     disconnectAndCleanup(): void {
         this.cleanUp();
@@ -364,53 +364,53 @@ export class MulticastManager {
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     private cleanUp(): void {
-        // 清除定时器
+        // Clear timers
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
 
-        // 关闭套接字
+        // Close socket
         if (this.socket) {
             try {
                 this.socket.dropMembership(this.multicastAddress);
-                this.logger.info('已离开组播组');
+                this.logger.info('Left multicast group');
             } catch (error) {
-                this.logger.warn('离开组播组时发生错误:', error as Error);
+                this.logger.warn('Error occurred while leaving multicast group:', error as Error);
             }
 
             this.socket.close(() => {
-                this.logger.info('组播套接字已关闭');
+                this.logger.info('Multicast socket closed');
             });
             this.socket = null;
         }
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     dispose(): void {
-        this.logger.info('开始清理组播管理器资源');
+        this.logger.info('Starting to clean up multicast manager resources');
 
         this.isShutdown = true;
         this.autoReconnect = false;
 
-        // 清理连接
+        // Clean up connection
         this.disconnectAndCleanup();
 
-        // 清除清理定时器
+        // Clear cleanup timer
         if (this.cleanupTimer) {
             clearInterval(this.cleanupTimer);
             this.cleanupTimer = null;
         }
 
-        this.logger.info('组播管理器资源清理完成');
+        this.logger.info('Multicast manager resource cleanup completed');
     }
 
-    // ==================== 状态查询方法 ====================
+    // ==================== Status Query Methods ====================
 
     isConnected(): boolean {
         return this.connectionState === ConnectionState.CONNECTED;

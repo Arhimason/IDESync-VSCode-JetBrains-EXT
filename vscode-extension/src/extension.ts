@@ -6,38 +6,41 @@ import {EditorStateManager} from './EditorStateManager';
 import {FileOperationHandler} from './FileOperationHandler';
 import {EventListenerManager} from './EventListenerManager';
 import {MessageProcessor} from './MessageProcessor';
-import {MulticastManager} from './MulticastManager';
+import {TcpClientManager} from './TcpClientManager';
 import {OperationQueueProcessor} from './OperationQueueProcessor';
 import {WindowStateManager} from './WindowStateManager';
+import {PartnerLauncher} from './PartnerLauncher';
+import {IDEPathDetector} from './IDEPathDetector';
 
 /**
- * VSCode与JetBrains同步类（重构版）
+ * VSCode and JetBrains Sync Class (Refactored Version)
  *
- * 采用模块化设计，主要组件：
- * - 窗口状态管理器：统一管理窗口活跃状态
- * - WebSocket服务器管理器：负责服务器管理和客户端连接
- * - 编辑器状态管理器：管理状态缓存、防抖和去重
- * - 文件操作处理器：处理文件的打开、关闭和导航
- * - 事件监听管理器：统一管理各种事件监听器
- * - 消息处理器：处理消息的序列化和反序列化
- * - 操作队列处理器：确保操作的原子性和顺序性
+ * Adopting modular design with main components:
+ * - Window State Manager: Unified management of window active state
+ * - WebSocket Server Manager: Responsible for server management and client connections
+ * - Editor State Manager: Manages state caching, debouncing and deduplication
+ * - File Operation Handler: Handles file opening, closing and navigation
+ * - Event Listener Manager: Unified management of various event listeners
+ * - Message Processor: Handles message serialization and deserialization
+ * - Operation Queue Processor: Ensures operation atomicity and ordering
  */
 export class VSCodeJetBrainsSync {
-    // 核心组件
+    // Core Components
     private logger: Logger;
     private windowStateManager!: WindowStateManager;
     private editorStateManager!: EditorStateManager;
     private fileOperationHandler!: FileOperationHandler;
     private messageProcessor!: MessageProcessor;
-    private multicastManager!: MulticastManager;
+    private tcpClientManager!: TcpClientManager;
     private eventListenerManager!: EventListenerManager;
     private operationQueueProcessor!: OperationQueueProcessor;
+    private partnerLauncher!: PartnerLauncher;
 
-    // UI组件
+    // UI Components
     private statusBarItem: vscode.StatusBarItem;
 
     constructor() {
-        this.logger = new Logger('IDE 同步');
+        this.logger = new Logger('IDE Sync');
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'vscode-jetbrains-sync.toggleAutoReconnect';
 
@@ -45,20 +48,20 @@ export class VSCodeJetBrainsSync {
         this.setupComponentCallbacks();
         this.eventListenerManager.setupEditorListeners();
 
-        // 检查自动启动配置
+        // Check auto-start configuration
         this.checkAutoStartConfig();
 
         this.updateStatusBarWidget();
         this.statusBarItem.show();
 
-        this.logger.info('VSCode-JetBrains同步服务初始化完成');
+        this.logger.info('VSCode-JetBrains sync service initialization completed');
     }
 
     /**
-     * 初始化各个组件
+     * Initialize various components
      */
     private initializeComponents() {
-        // 首先初始化 FileUtils
+        // First initialize FileUtils
         FileUtils.initialize(this.logger);
 
         this.windowStateManager = new WindowStateManager(this.logger);
@@ -68,46 +71,49 @@ export class VSCodeJetBrainsSync {
         this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager, this.windowStateManager);
         this.fileOperationHandler = new FileOperationHandler(this.logger, this.editorStateManager, this.windowStateManager);
         this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
-        this.multicastManager = new MulticastManager(this.logger, this.messageProcessor);
+        this.tcpClientManager = new TcpClientManager(this.logger, this.messageProcessor);
         this.operationQueueProcessor = new OperationQueueProcessor(
-            this.logger, this.multicastManager
+            this.logger, this.tcpClientManager
         );
+        this.partnerLauncher = new PartnerLauncher(this.logger);
     }
 
     /**
-     * 设置组件间的回调关系
+     * Setup callback relationships between components
      */
     private setupComponentCallbacks() {
-        // 窗口状态变化回调
+        // Window state change callback
         this.windowStateManager.setOnWindowStateChangeCallback((isActive: boolean) => {
             if (!isActive) {
-                // 窗口失焦时发送工作区同步状态
+                // Send workspace sync state when window loses focus
                 const workspaceSyncState = this.editorStateManager.createWorkspaceSyncState(true);
-                this.logger.info(`窗口失焦，发送工作区同步状态，包含${workspaceSyncState.openedFiles?.length || 0}个打开的文件`);
+                this.logger.info(`Window lost focus, sending workspace sync state with ${workspaceSyncState.openedFiles?.length || 0} opened files`);
                 this.editorStateManager.updateState(workspaceSyncState);
             }
         });
 
-        // 连接状态变化回调
+        // Connection state change callback
         const connectionCallback: ConnectionCallback = {
             onConnected: () => {
-                this.logger.info('组播连接状态变更: 已连接');
+                this.logger.info('TCP connection state changed: Connected');
                 this.updateStatusBarWidget();
                 this.editorStateManager.sendCurrentState(this.windowStateManager.isWindowActive());
             },
             onDisconnected: () => {
-                this.logger.info('组播连接状态变更: 已断开');
+                this.logger.info('TCP connection state changed: Disconnected');
                 this.updateStatusBarWidget();
             },
             onReconnecting: () => {
-                this.logger.info('组播连接状态变更: 正在重连');
+                this.logger.info('TCP connection state changed: Scanning for servers');
                 this.updateStatusBarWidget();
+                // If no server found, prompt to launch partner IDE
+                this.checkAndPromptPartnerLaunch();
             }
         };
 
-        this.multicastManager.setConnectionCallback(connectionCallback);
+        this.tcpClientManager.setConnectionCallback(connectionCallback);
 
-        // 状态变化回调
+        // State change callback
         this.editorStateManager.setStateChangeCallback((state: EditorState) => {
             if (state.isActive) {
                 this.operationQueueProcessor.addOperation(state);
@@ -117,13 +123,13 @@ export class VSCodeJetBrainsSync {
 
 
     /**
-     * 更新状态栏显示
+     * Update status bar display
      */
     private updateStatusBarWidget() {
-        const autoReconnect = this.multicastManager.isAutoReconnect();
-        const connectionState = this.multicastManager.getConnectionState()
+        const autoReconnect = this.tcpClientManager.isAutoReconnect();
+        const connectionState = this.tcpClientManager.getConnectionState()
 
-        // 参考Kotlin实现的图标状态逻辑
+        // Reference Kotlin implementation icon status logic
         const icon = (() => {
             if (connectionState === ConnectionState.CONNECTED) {
                 return '$(check)';
@@ -134,10 +140,10 @@ export class VSCodeJetBrainsSync {
             }
         })();
 
-        // 参考Kotlin实现的文本状态逻辑
+        // Reference Kotlin implementation text status logic
         const statusText = autoReconnect ? 'IDE Sync On' : 'Turn IDE Sync On';
 
-        // 参考Kotlin实现的工具提示逻辑
+        // Reference Kotlin implementation tooltip logic
         const tooltip = (() => {
             let tip = '';
             if (connectionState === ConnectionState.CONNECTED) {
@@ -153,46 +159,107 @@ export class VSCodeJetBrainsSync {
 
 
     /**
-     * 检查自动启动配置
+     * Check auto-start configuration
      */
     private checkAutoStartConfig() {
         const autoStartSync = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('autoStartSync', false);
         if (autoStartSync) {
-            this.logger.info('检测到自动启动配置已开启，正在启动同步功能...');
-            this.multicastManager.toggleAutoReconnect();
+            this.logger.info('Auto-start configuration detected as enabled, starting sync functionality...');
+            this.tcpClientManager.toggleAutoReconnect();
         } else {
-            this.logger.info('自动启动配置已关闭，需要手动启动同步功能');
+            this.logger.info('Auto-start configuration is disabled, manual start of sync functionality required');
         }
     }
 
     /**
-     * 切换自动重连状态
+     * Check and prompt to launch partner IDE
+     */
+    private checkAndPromptPartnerLaunch() {
+        // Delayed check, give time for server scanning
+        setTimeout(() => {
+            if (this.tcpClientManager.isConnecting() && !this.tcpClientManager.isConnected()) {
+                this.partnerLauncher.checkAndPromptLaunch(() => {
+                    // Re-scan after launch completes
+                    this.tcpClientManager.restartConnection();
+                });
+            }
+        }, 3000);
+    }
+
+    /**
+     * Toggle auto reconnect state
      */
     public toggleAutoReconnect() {
-        this.multicastManager.toggleAutoReconnect();
+        this.tcpClientManager.toggleAutoReconnect();
         this.updateStatusBarWidget();
+    }
+
+    /**
+     * Detect available JetBrains IDEs and show them to user
+     */
+    public async detectIDEs() {
+        try {
+            this.logger.info('Detecting available JetBrains IDEs...');
+            const idePathDetector = new IDEPathDetector(this.logger);
+            const detectedIDEs = await idePathDetector.detectAllJetBrainsPaths();
+            
+            if (detectedIDEs.length === 0) {
+                vscode.window.showInformationMessage('No JetBrains IDEs detected. Please install a JetBrains IDE or enter the path manually.');
+                return;
+            }
+            
+            // Create quick pick items
+            const items = detectedIDEs.map(ide => ({
+                label: ide.name,
+                description: ide.path,
+                detail: `Click to use ${ide.name}`
+            }));
+            
+            // Show quick pick
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select a JetBrains IDE to use for synchronization',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+            
+            if (selected) {
+                // Update settings with selected path
+                const config = vscode.workspace.getConfiguration('vscode-jetbrains-sync');
+                await config.update('partnerIDEPath', selected.description, vscode.ConfigurationTarget.Workspace);
+                
+                vscode.window.showInformationMessage(
+                    `Selected ${selected.label} for synchronization. Path: ${selected.description}`,
+                    'OK'
+                );
+                
+                this.logger.info(`User selected IDE: ${selected.label} at ${selected.description}`);
+            }
+        } catch (error) {
+            this.logger.error('Failed to detect IDEs:', error as Error);
+            vscode.window.showErrorMessage(`Failed to detect IDEs: ${(error as Error).message}`);
+        }
     }
 
 
     /**
-     * 清理资源
+     * Cleanup resources
      */
     public dispose() {
-        this.logger.info('开始清理VSCode同步服务资源（重构版）');
+        this.logger.info('Starting cleanup of VSCode sync service resources (refactored version)');
 
         this.operationQueueProcessor.dispose();
-        this.multicastManager.dispose();
+        this.tcpClientManager.dispose();
         this.eventListenerManager.dispose();
         this.editorStateManager.dispose();
         this.windowStateManager.dispose();
         this.statusBarItem.dispose();
         this.logger.dispose();
 
-        this.logger.info('VSCode同步服务资源清理完成');
+        this.logger.info('VSCode sync service resource cleanup completed');
     }
 }
 
-// 导出激活和停用函数
+// Export activation and deactivation functions
 let syncInstance: VSCodeJetBrainsSync | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -201,6 +268,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('vscode-jetbrains-sync.toggleAutoReconnect', () => {
             syncInstance?.toggleAutoReconnect();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vscode-jetbrains-sync.detectIDEs', () => {
+            syncInstance?.detectIDEs();
         })
     );
 

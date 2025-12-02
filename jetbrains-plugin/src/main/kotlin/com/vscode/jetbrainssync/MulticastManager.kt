@@ -11,12 +11,12 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
 
-// ==================== 内部数据类 ====================
+// ==================== Internal Data Classes ====================
 
 
 /**
- * 组播管理器
- * 负责UDP组播消息的发送和接收，实现去中心化的编辑器同步
+ * Multicast Manager
+ * Responsible for sending and receiving UDP multicast messages, implementing decentralized editor synchronization
  */
 class MulticastManager(
     private val project: Project,
@@ -24,22 +24,22 @@ class MulticastManager(
 ) {
     private val log: Logger = Logger.getInstance(MulticastManager::class.java)
 
-    // ==================== 配置常量 ====================
-    private val multicastAddress = "224.0.0.1" // 本地链路组播地址，仅本机通信
-    private var multicastPort: Int // 组播端口（从配置读取）
-    private val maxMessageSize = 8192 // 最大消息大小（8KB）
+    // ==================== Configuration Constants ====================
+    private val multicastAddress = "224.0.0.1" // Local link multicast address, local machine communication only
+    private var multicastPort: Int // Multicast port (read from configuration)
+    private val maxMessageSize = 8192 // Maximum message size (8KB)
 
-    // ==================== 网络组件 ====================
+    // ==================== Network Components ====================
     private var multicastSocket: MulticastSocket? = null
     private var networkInterface: NetworkInterface? = null
     private var group: InetSocketAddress? = null
 
-    // ==================== 状态管理 ====================
+    // ==================== State Management ====================
     private val connectionState = AtomicReference(ConnectionState.DISCONNECTED)
     private val autoReconnect = AtomicBoolean(false)
     private var connectionCallback: ConnectionCallback? = null
 
-    // ==================== 线程管理 ====================
+    // ==================== Thread Management ====================
     private val executorService: ExecutorService = Executors.newCachedThreadPool { r ->
         val thread = Thread(r, "Multicast-Manager-Worker")
         thread.isDaemon = true
@@ -50,42 +50,53 @@ class MulticastManager(
     private var receiverThread: Thread? = null
 
     init {
-        // 从配置中读取组播端口（复用WebSocket端口配置）
-        multicastPort = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
-        log.info("初始化组播管理器 - 地址: $multicastAddress:$multicastPort")
+        // Read multicast port from configuration
+        val settings = VSCodeJetBrainsSyncSettings.getInstance(project)
+        multicastPort = if (settings.state.useCustomPort) {
+            settings.state.customPort
+        } else {
+            3000 // Default port for multicast when auto-detection is used
+        }
+        log.info("Initializing multicast manager - Address: $multicastAddress:$multicastPort")
     }
 
-    // ==================== 初始化相关方法 ====================
+    // ==================== Initialization Related Methods ====================
 
     /**
-     * 更新组播端口配置
+     * Update multicast port configuration
      */
     fun updateMulticastPort() {
-        val newPort = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
+        val settings = VSCodeJetBrainsSyncSettings.getInstance(project)
+        val newPort = if (settings.state.useCustomPort) {
+            settings.state.customPort
+        } else {
+            3000 // Default port for multicast when auto-detection is used
+        }
+        
         if (newPort != multicastPort) {
-            log.info("组播端口配置变更: $multicastPort -> $newPort")
+            log.info("Multicast port configuration changed: $multicastPort -> $newPort")
 
-            // 更新端口
+            // Update port
             multicastPort = newPort
 
-            // 如果当前已启用自动重连，则重启连接
+            // If auto-reconnect is currently enabled, restart connection
             if (this.autoReconnect.get()) {
                 this.restartConnection();
             }
         }
     }
 
-    // ==================== 公共接口方法 ====================
+    // ==================== Public Interface Methods ====================
 
     /**
-     * 设置连接状态回调
+     * Set connection state callback
      */
     fun setConnectionCallback(callback: ConnectionCallback) {
         this.connectionCallback = callback
     }
 
     /**
-     * 切换自动重连状态
+     * Toggle auto-reconnect state
      */
     fun toggleAutoReconnect() {
         connectionLock.lock()
@@ -94,18 +105,18 @@ class MulticastManager(
             val newState = !currentState
 
             if (!autoReconnect.compareAndSet(currentState, newState)) {
-                log.warn("自动重连状态已被其他线程修改，操作取消")
+                log.warn("Auto-reconnect state has been modified by another thread, operation cancelled")
                 return
             }
 
-            log.info("组播同步状态切换为: ${if (newState) "开启" else "关闭"}")
+            log.info("Multicast sync state toggled to: ${if (newState) "enabled" else "disabled"}")
 
             if (!newState) {
                 disconnectAndCleanup()
-                log.info("组播同步已关闭")
+                log.info("Multicast sync has been disabled")
             } else {
                 connectMulticast()
-                log.info("组播同步已开启，开始连接...")
+                log.info("Multicast sync has been enabled, starting connection...")
             }
         } finally {
             connectionLock.unlock()
@@ -113,20 +124,20 @@ class MulticastManager(
     }
 
     /**
-     * 重启连接
+     * Restart connection
      */
     fun restartConnection() {
-        log.info("手动重启组播连接")
+        log.info("Manually restarting multicast connection")
         disconnectAndCleanup()
         if (autoReconnect.get()) {
             connectMulticast()
         }
     }
 
-    // ==================== 连接管理方法 ====================
+    // ==================== Connection Management Methods ====================
 
     /**
-     * 连接组播组
+     * Connect to multicast group
      */
     private fun connectMulticast() {
         if (isShutdown.get() || !autoReconnect.get() || connectionState.get() != ConnectionState.DISCONNECTED) {
@@ -140,95 +151,115 @@ class MulticastManager(
                 }
 
                 if (!connectionState.compareAndSet(ConnectionState.DISCONNECTED, ConnectionState.CONNECTING)) {
-                    log.info("连接状态不是DISCONNECTED，跳过连接尝试")
+                    log.info("Connection state is not DISCONNECTED, skipping connection attempt")
                     return@submit
                 }
 
                 setConnectionState(ConnectionState.CONNECTING)
-                log.info("正在连接组播组...")
+                log.info("Connecting to multicast group...")
 
-                // 清理现有连接
+                // Clean up existing connection
                 cleanUp()
 
-                // 查找可用的网络接口
+                // Find available network interface
                 networkInterface = findAvailableNetworkInterface()
                 if (networkInterface == null) {
-                    throw RuntimeException("未找到可用的网络接口")
+                    throw RuntimeException("No available network interface found")
                 }
 
-                log.info("使用网络接口: ${networkInterface!!.displayName}")
+                log.info("Using network interface: ${networkInterface!!.displayName}")
 
-                // 创建组播套接字
+                // Create multicast socket
                 multicastSocket = MulticastSocket(multicastPort)
                 multicastSocket!!.reuseAddress = true
                 multicastSocket!!.networkInterface = networkInterface
 
-                // 加入组播组
+                // Join multicast group
                 group = InetSocketAddress(InetAddress.getByName(multicastAddress), multicastPort)
                 multicastSocket!!.joinGroup(group, networkInterface)
 
                 setConnectionState(ConnectionState.CONNECTED)
-                log.info("成功加入组播组: $multicastAddress:$multicastPort")
+                log.info("Successfully joined multicast group: $multicastAddress:$multicastPort")
 
-                // 启动消息接收线程
+                // Start message receiver thread
                 startMessageReceiver()
 
             } catch (e: Exception) {
-                log.warn("连接组播组失败: ${e.message}", e)
+                log.warn("Failed to connect to multicast group: ${e.message}", e)
                 handleConnectionError()
             }
         }
     }
 
     /**
-     * 查找可用的网络接口
+     * Find available network interface
      */
     private fun findAvailableNetworkInterface(): NetworkInterface? {
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
+            if (!interfaces.hasMoreElements()) {
+                log.error("No network interfaces found in the system")
+                return null
+            }
 
-            // 优先使用回环接口，确保仅本机通信
+            val availableInterfaces = mutableListOf<String>()
+            
+            // Prioritize loopback interface to ensure local machine communication only
             for (netInterface in interfaces) {
+                val interfaceInfo = "Interface: ${netInterface.displayName}, Loopback: ${netInterface.isLoopback}, Up: ${netInterface.isUp}, Multicast: ${netInterface.supportsMulticast()}"
+                availableInterfaces.add(interfaceInfo)
+                
                 if (netInterface.isLoopback &&
                     netInterface.isUp &&
                     netInterface.supportsMulticast()
                 ) {
-                    log.info("使用回环网络接口: ${netInterface.displayName}")
+                    log.info("Using loopback network interface: ${netInterface.displayName}")
                     return netInterface
                 }
             }
 
-            // 如果回环接口不可用，尝试使用本地链路接口作为备选
-            log.warn("回环接口不可用，尝试使用本地链路接口")
-            for (netInterface in interfaces) {
-                if (!netInterface.isLoopback &&
-                    netInterface.isUp &&
-                    netInterface.supportsMulticast() &&
-                    netInterface.inetAddresses.hasMoreElements()
-                ) {
-                    // 检查是否为本地链路地址
+            log.warn("Loopback interface not available, available interface list: ${availableInterfaces.joinToString("; ")}")
+            
+            // Reset enumerator
+            val interfaces2 = NetworkInterface.getNetworkInterfaces()
+            
+            // If loopback interface is not available, try using any available interface as fallback
+            for (netInterface in interfaces2) {
+                if (netInterface.isUp && netInterface.supportsMulticast()) {
+                    // More relaxed address check - try using as long as there's an IP address
                     val addresses = netInterface.inetAddresses
                     while (addresses.hasMoreElements()) {
                         val address = addresses.nextElement()
-                        if (address.isSiteLocalAddress || address.isLinkLocalAddress) {
-                            log.info("使用本地链路网络接口: ${netInterface.displayName}")
+                        // Exclude IPv6 addresses (if multicast address is IPv4)
+                        if (address is Inet4Address) {
+                            log.info("Using network interface: ${netInterface.displayName}, Address: ${address.hostAddress}")
                             return netInterface
                         }
                     }
                 }
             }
 
-            log.error("未找到可用的网络接口")
+            // Final fallback: try using any enabled interface even if it doesn't support multicast
+            log.warn("No multicast-supporting interface found, trying any enabled interface")
+            val interfaces3 = NetworkInterface.getNetworkInterfaces()
+            for (netInterface in interfaces3) {
+                if (netInterface.isUp && netInterface.inetAddresses.hasMoreElements()) {
+                    log.warn("Fallback using network interface: ${netInterface.displayName} (may not support multicast)")
+                    return netInterface
+                }
+            }
+
+            log.error("No available network interface found, checked system interfaces: ${availableInterfaces.joinToString("; ")}")
             return null
 
         } catch (e: Exception) {
-            log.warn("查找网络接口时发生错误: ${e.message}", e)
+            log.warn("Error occurred while finding network interface: ${e.message}", e)
             return null
         }
     }
 
     /**
-     * 启动消息接收线程
+     * Start message receiver thread
      */
     private fun startMessageReceiver() {
         receiverThread = thread(name = "Multicast-Message-Receiver") {
@@ -245,41 +276,41 @@ class MulticastManager(
                     }
 
                 } catch (e: SocketTimeoutException) {
-                    // 超时是正常的，继续循环
+                    // Timeout is normal, continue loop
                     continue
                 } catch (e: Exception) {
                     if (!isShutdown.get()) {
-                        log.warn("接收组播消息时发生错误: ${e.message}", e)
+                        log.warn("Error occurred while receiving multicast message: ${e.message}", e)
                         handleConnectionError()
                         break
                     }
                 }
             }
 
-            log.info("消息接收线程已退出")
+            log.info("Message receiver thread has exited")
         }
     }
 
-    // ==================== 消息处理方法 ====================
+    // ==================== Message Processing Methods ====================
 
     /**
-     * 处理接收到的消息
+     * Handle received message
      */
     private fun handleReceivedMessage(message: String) {
         try {
             messageProcessor.handleMessage(message)
         } catch (e: Exception) {
-            log.warn("处理接收到的消息时发生错误: ${e.message}", e)
+            log.warn("Error occurred while handling received message: ${e.message}", e)
         }
     }
 
 
     /**
-     * 发送消息到组播组
+     * Send message to multicast group
      */
     fun sendMessage(messageWrapper: MessageWrapper): Boolean {
         if (!isConnected() || !autoReconnect.get()) {
-            log.warn("当前未连接，丢弃消息: ${messageWrapper.toJsonString()}")
+            log.warn("Currently not connected, discarding message: ${messageWrapper.toJsonString()}")
             return false
         }
 
@@ -288,7 +319,7 @@ class MulticastManager(
             val messageBytes = messageString.toByteArray(Charsets.UTF_8)
 
             if (messageBytes.size > maxMessageSize) {
-                log.warn("消息过大，无法发送: ${messageBytes.size} bytes")
+                log.warn("Message too large, cannot send: ${messageBytes.size} bytes")
                 return false
             }
 
@@ -300,20 +331,20 @@ class MulticastManager(
             )
 
             multicastSocket?.send(packet)
-            log.info("发送组播消息内容: $messageString")
+            log.info("Sent multicast message content: $messageString")
             true
 
         } catch (e: Exception) {
-            log.warn("发送组播消息失败: ${e.message}", e)
+            log.warn("Failed to send multicast message: ${e.message}", e)
             handleConnectionError()
             false
         }
     }
 
-    // ==================== 状态管理方法 ====================
+    // ==================== State Management Methods ====================
 
     /**
-     * 处理连接错误
+     * Handle connection error
      */
     private fun handleConnectionError() {
         setConnectionState(ConnectionState.DISCONNECTED)
@@ -321,19 +352,19 @@ class MulticastManager(
         if (autoReconnect.get() && !isShutdown.get()) {
             executorService.submit {
                 try {
-                    Thread.sleep(5000) // 等待5秒后重连
+                    Thread.sleep(5000) // Wait 5 seconds before reconnecting
                     if (autoReconnect.get() && !isShutdown.get()) {
                         connectMulticast()
                     }
                 } catch (e: InterruptedException) {
-                    // 线程被中断，退出
+                    // Thread was interrupted, exit
                 }
             }
         }
     }
 
     /**
-     * 设置连接状态并触发回调
+     * Set connection state and trigger callback
      */
     private fun setConnectionState(state: ConnectionState) {
         if (connectionState.get() == state) {
@@ -349,10 +380,10 @@ class MulticastManager(
         }
     }
 
-    // ==================== 资源清理方法 ====================
+    // ==================== Resource Cleanup Methods ====================
 
     /**
-     * 断开连接并清理资源
+     * Disconnect and clean up resources
      */
     fun disconnectAndCleanup() {
         cleanUp()
@@ -360,26 +391,26 @@ class MulticastManager(
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     private fun cleanUp() {
         connectionLock.lock()
         try {
-            // 停止接收线程
+            // Stop receiver thread
             receiverThread?.interrupt()
             receiverThread = null
 
-            // 离开组播组
+            // Leave multicast group
             if (multicastSocket != null && group != null && networkInterface != null) {
                 try {
                     multicastSocket!!.leaveGroup(group, networkInterface)
-                    log.info("已离开组播组")
+                    log.info("Left multicast group")
                 } catch (e: Exception) {
-                    log.warn("离开组播组时发生错误: ${e.message}")
+                    log.warn("Error occurred while leaving multicast group: ${e.message}")
                 }
             }
 
-            // 关闭套接字
+            // Close socket
             multicastSocket?.close()
             multicastSocket = null
             group = null
@@ -391,18 +422,18 @@ class MulticastManager(
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     fun dispose() {
-        log.info("开始清理组播管理器资源")
+        log.info("Starting to clean up multicast manager resources")
 
         isShutdown.set(true)
         autoReconnect.set(false)
 
-        // 清理连接
+        // Clean up connection
         disconnectAndCleanup()
 
-        // 关闭线程池
+        // Close thread pool
         executorService.shutdown()
         try {
             if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -412,10 +443,10 @@ class MulticastManager(
             executorService.shutdownNow()
         }
 
-        log.info("组播管理器资源清理完成")
+        log.info("Multicast manager resource cleanup completed")
     }
 
-    // ==================== 状态查询方法 ====================
+    // ==================== Status Query Methods ====================
 
     fun isConnected(): Boolean = connectionState.get() == ConnectionState.CONNECTED
     fun isAutoReconnect(): Boolean = autoReconnect.get()

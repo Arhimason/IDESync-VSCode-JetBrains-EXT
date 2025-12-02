@@ -43,20 +43,66 @@
             {
                 "command": "vscode-jetbrains-sync.toggleAutoReconnect",
                 "title": "Toggle VSCode-JetBrains Sync"
+            },
+            {
+                "command": "vscode-jetbrains-sync.launchPartner",
+                "title": "IDE Sync: Launch Partner IDE"
+            },
+            {
+                "command": "vscode-jetbrains-sync.restartConnection",
+                "title": "IDE Sync: Restart Connection"
+            },
+            {
+                "command": "vscode-jetbrains-sync.detectIDEs",
+                "title": "IDE Sync: Detect Available JetBrains IDEs"
             }
         ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "vscode-jetbrains-sync.detectIDEs",
+                    "when": "true"
+                }
+            ]
+        },
         "configuration": {
             "title": "IDE Sync - Connect to JetBrains IDE",
             "properties": {
-                "vscode-jetbrains-sync.port": {
+                "vscode-jetbrains-sync.useCustomPort": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use custom port for synchronization. If disabled, port will be selected automatically to avoid conflicts."
+                },
+                "vscode-jetbrains-sync.customPort": {
                     "type": "number",
                     "default": 3000,
-                    "description": "Configure the port for synchronization with JetBrains IDE (use different ports to create separate sync groups)."
+                    "minimum": 1024,
+                    "maximum": 65535,
+                    "description": "Custom port for synchronization (only used when 'Use custom port' is enabled)."
                 },
                 "vscode-jetbrains-sync.autoStartSync": {
                     "type": "boolean",
                     "default": false,
                     "description": "Automatically start sync when IDE opens (default: disabled, sync must be manually enabled)."
+                },
+                "vscode-jetbrains-sync.autoLaunchPartner": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automatically launch JetBrains IDE if not found when sync starts."
+                },
+                "vscode-jetbrains-sync.partnerIDEPath": {
+                    "type": "string",
+                    "default": "",
+                    "editPresentation": "multilineText",
+                    "examples": [
+                        "idea",
+                        "webstorm",
+                        "pycharm",
+                        "/opt/jetbrains/idea/bin/idea.sh",
+                        "C:\\Program Files\\JetBrains\\IntelliJ IDEA\\bin\\idea64.exe",
+                        "/Applications/IntelliJ IDEA.app/Contents/MacOS/idea"
+                    ],
+                    "markdownDescription": "**Partner IDE Path** - Path to JetBrains IDE executable\n\n**Leave empty** for auto-detection, or enter:\n\n**💻 Command names:**\n- `idea` - IntelliJ IDEA\n- `webstorm` - WebStorm\n- `pycharm` - PyCharm\n- `phpstorm` - PhpStorm\n- `rubymine` - RubyMine\n- `clion` - CLion\n- `datagrip` - DataGrip\n- `rider` - Rider\n- `goland` - GoLand\n\n**📂 Common paths:**\n- **Linux:** `/opt/jetbrains/idea/bin/idea.sh`\n- **Windows:** `C:\\Program Files\\JetBrains\\IntelliJ IDEA\\bin\\idea64.exe`\n- **macOS:** `/Applications/IntelliJ IDEA.app/Contents/MacOS/idea`\n\n💡 **Tip:** Use the `IDE Sync: Detect Available JetBrains IDEs` command to auto-populate this field with detected IDEs."
                 }
             }
         }

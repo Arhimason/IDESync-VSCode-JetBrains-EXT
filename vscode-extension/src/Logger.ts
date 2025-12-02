@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 
 /**
- * 日志管理器
- * 提供统一的日志记录功能
+ * Logger manager
+ * Provides unified logging functionality
  */
 export class Logger {
     private outputChannel: vscode.OutputChannel;
@@ -17,28 +17,28 @@ export class Logger {
     }
 
     info(message: string) {
-        const formattedMessage = this.formatMessage('信息', message);
+        const formattedMessage = this.formatMessage('INFO', message);
         this.outputChannel.appendLine(formattedMessage);
     }
 
     warn(message: string, error?: Error) {
-        const formattedMessage = this.formatMessage('警告', message);
+        const formattedMessage = this.formatMessage('WARN', message);
         this.outputChannel.appendLine(formattedMessage);
         if (error) {
-            this.outputChannel.appendLine(this.formatMessage('错误', `堆栈: ${error.stack}`));
+            this.outputChannel.appendLine(this.formatMessage('ERROR', `Stack: ${error.stack}`));
         }
     }
 
     error(message: string, error?: Error) {
-        const formattedMessage = this.formatMessage('错误', message);
+        const formattedMessage = this.formatMessage('ERROR', message);
         this.outputChannel.appendLine(formattedMessage);
         if (error) {
-            this.outputChannel.appendLine(this.formatMessage('错误', `堆栈: ${error.stack}`));
+            this.outputChannel.appendLine(this.formatMessage('ERROR', `Stack: ${error.stack}`));
         }
     }
 
     debug(message: string) {
-        const formattedMessage = this.formatMessage('调试', message);
+        const formattedMessage = this.formatMessage('DEBUG', message);
         this.outputChannel.appendLine(formattedMessage);
     }
 

@@ -8,91 +8,91 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 操作队列处理器
- * 负责处理异步操作队列，确保文件操作的原子性和顺序性
- * 包含队列容量管理和操作添加逻辑
+ * Operation queue processor
+ * Responsible for handling asynchronous operation queues, ensuring atomicity and order of file operations
+ * Includes queue capacity management and operation addition logic
  */
 class OperationQueueProcessor(
-    private val multicastManager: MulticastManager,
+    private val messageSender: MessageSender,
     private val localIdentifierManager: LocalIdentifierManager
 ) {
     private val log: Logger = Logger.getInstance(OperationQueueProcessor::class.java)
 
-    // 内部队列管理
+    // Internal queue management
     private val operationQueue = LinkedBlockingQueue<EditorState>()
     private val maxQueueSize = 100
 
-    // 线程池
+    // Thread pool
     private val executorService: ExecutorService = Executors.newSingleThreadExecutor { r ->
         val thread = Thread(r, "Operation-Queue-Processor")
         thread.isDaemon = true
         thread
     }
 
-    // 处理状态
+    // Processing state
     private val isShutdown = AtomicBoolean(false)
 
     init {
-        // 在构造函数中自动启动队列处理器
+        // Automatically start queue processor in constructor
         start()
     }
 
     /**
-     * 添加操作到队列
-     * 包含队列容量管理逻辑
+     * Add operation to queue
+     * Includes queue capacity management logic
      */
     fun addOperation(state: EditorState) {
         if (operationQueue.size >= maxQueueSize) {
             operationQueue.poll()
-            log.warn("操作队列已满，移除最旧的操作")
+            log.warn("Operation queue is full, removing oldest operation")
         }
 
         operationQueue.offer(state)
-        log.info("操作已推入队列：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+        log.info("Operation pushed to queue: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}")
     }
 
     /**
-     * 启动队列处理器
+     * Start queue processor
      */
     fun start() {
-        log.info("启动操作队列处理器")
+        log.info("Starting operation queue processor")
         executorService.submit(this::processQueue)
     }
 
     /**
-     * 队列处理主循环
+     * Queue processing main loop
      */
     private fun processQueue() {
         while (!isShutdown.get() && !Thread.currentThread().isInterrupted) {
             try {
-                // 阻塞等待队列中的任务
+                // Block and wait for tasks in queue
                 val state = operationQueue.take()
                 processOperation(state)
 
-                // 避免过于频繁的操作
+                // Avoid overly frequent operations
                 Thread.sleep(50)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
                 break
             } catch (e: Exception) {
-                log.warn("队列处理器发生错误: ${e.message}", e)
+                log.warn("Queue processor error: ${e.message}", e)
             }
         }
     }
 
     /**
-     * 处理单个操作
+     * Process single operation
      */
     private fun processOperation(state: EditorState) {
         try {
             sendStateUpdate(state)
         } catch (e: Exception) {
-            log.warn("处理操作失败: ${e.message}", e)
+            log.warn("Failed to process operation: ${e.message}", e)
         }
     }
 
     /**
-     * 发送状态更新
+     * Send state update
      */
     private fun sendStateUpdate(state: EditorState) {
         val messageWrapper = MessageWrapper.create(
@@ -100,20 +100,20 @@ class OperationQueueProcessor(
             localIdentifierManager.identifier,
             state
         )
-        val success = multicastManager.sendMessage(messageWrapper)
+        val success = messageSender.sendMessage(messageWrapper)
         if (success) {
-            log.info("✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+            log.info("✅ Message sent: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}")
         } else {
-            log.info("❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+            log.info("❌ Failed to send message: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}")
         }
     }
 
 
     /**
-     * 停止处理器
+     * Stop processor
      */
     fun dispose() {
-        log.info("开始关闭操作队列处理器")
+        log.info("Starting to shutdown operation queue processor")
 
         isShutdown.set(true)
         executorService.shutdown()
@@ -126,9 +126,9 @@ class OperationQueueProcessor(
             executorService.shutdownNow()
         }
 
-        // 清理队列
+        // Clear queue
         operationQueue.clear()
 
-        log.info("操作队列处理器已关闭")
+        log.info("Operation queue processor shutdown completed")
     }
 }

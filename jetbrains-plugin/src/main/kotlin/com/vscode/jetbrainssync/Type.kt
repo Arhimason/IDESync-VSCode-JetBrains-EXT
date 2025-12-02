@@ -5,97 +5,97 @@ import java.util.*
 
 
 /**
- * 操作类型枚举
- * 定义编辑器同步过程中的各种操作类型
- * 枚举名称直接对应JSON传输格式，无需自定义序列化
+ * Action type enumeration
+ * Defines various operation types during editor synchronization
+ * Enumeration names directly correspond to JSON transmission format, no custom serialization needed
  */
 enum class ActionType {
-    CLOSE,      // 关闭文件
-    OPEN,       // 打开文件
-    NAVIGATE,   // 光标导航和代码选中
-    WORKSPACE_SYNC  // 工作区状态同步
+    CLOSE,      // Close file
+    OPEN,       // Open file
+    NAVIGATE,   // Cursor navigation and code selection
+    WORKSPACE_SYNC  // Workspace state synchronization
 }
 
 /**
- * 消息来源枚举
- * 定义消息的发送方
+ * Message source enumeration
+ * Defines the sender of the message
  */
 enum class SourceType {
-    VSCODE,     // VSCode编辑器
+    VSCODE,     // VSCode editor
     JETBRAINS   // JetBrains IDE
 }
 
 /**
- * WebSocket连接状态枚举
- * 定义WebSocket连接的各种状态
+ * WebSocket connection state enumeration
+ * Defines various states of WebSocket connection
  */
 enum class ConnectionState {
-    DISCONNECTED,   // 未连接
-    CONNECTING,     // 连接中
-    CONNECTED       // 已连接
+    DISCONNECTED,   // Disconnected
+    CONNECTING,     // Connecting
+    CONNECTED       // Connected
 }
 
 /**
- * 编辑器状态数据类
- * 用于在VSCode和JetBrains之间同步编辑器状态
+ * Editor state data class
+ * Used to synchronize editor state between VSCode and JetBrains
  */
 data class EditorState(
-    val action: ActionType,         // 操作类型枚举（必填）
-    val filePath: String,           // 文件路径
-    val line: Int,                  // 行号（从0开始）
-    val column: Int,                // 列号（从0开始）
-    val source: SourceType = SourceType.JETBRAINS, // 消息来源枚举
-    val isActive: Boolean = false,  // IDE是否处于活跃状态
-    val timestamp: String = formatTimestamp(), // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
-    val openedFiles: List<String>? = null,  // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
-    // 选中范围相关字段（NAVIGATE类型使用）
-    val selectionStartLine: Int? = null,    // 选中开始行号（从0开始）
-    val selectionStartColumn: Int? = null,  // 选中开始列号（从0开始）
-    val selectionEndLine: Int? = null,      // 选中结束行号（从0开始）
-    val selectionEndColumn: Int? = null     // 选中结束列号（从0开始）
+    val action: ActionType,         // Action type enumeration (required)
+    val filePath: String,           // File path
+    val line: Int,                  // Line number (starts from 0)
+    val column: Int,                // Column number (starts from 0)
+    val source: SourceType = SourceType.JETBRAINS, // Message source enumeration
+    val isActive: Boolean = false,  // Whether IDE is in active state
+    val timestamp: String = formatTimestamp(), // Timestamp (yyyy-MM-dd HH:mm:ss.SSS)
+    val openedFiles: List<String>? = null,  // All opened files in workspace (only used by WORKSPACE_SYNC type)
+    // Selection range related fields (used by NAVIGATE type)
+    val selectionStartLine: Int? = null,    // Selection start line number (starts from 0)
+    val selectionStartColumn: Int? = null,  // Selection start column number (starts from 0)
+    val selectionEndLine: Int? = null,      // Selection end line number (starts from 0)
+    val selectionEndColumn: Int? = null     // Selection end column number (starts from 0)
 ) {
-    // 平台兼容路径缓存
+    // Platform compatible path cache
     @Transient
     private var _compatiblePath: String? = null
 
     /**
-     * 获取平台兼容的文件路径
-     * 首次调用时会清理和转换原始路径，并缓存结果
-     * 后续调用直接返回缓存的路径
+     * Get platform compatible file path
+     * On first call, it cleans and transforms the original path and caches the result
+     * Subsequent calls directly return the cached path
      */
     fun getCompatiblePath(): String {
-        // 如果已经缓存，直接返回
+        // If already cached, return directly
         _compatiblePath?.let {
             return it
         }
 
-        // 首次调用，进行路径清理和转换
+        // First call, perform path cleaning and conversion
         val cleaned = cleanFilePath(filePath)
         val converted = convertToIdeaFormat(cleaned)
         _compatiblePath = converted
 
-        // 输出日志
+        // Output log
         if (converted != filePath) {
-            // 使用系统日志输出路径转换信息
-            System.out.println("EditorState: 路径已转换 $filePath -> $converted")
+            // Use system log to output path conversion information
+            System.out.println("EditorState: Path converted $filePath -> $converted")
         }
 
         return converted
     }
 
     /**
-     * 清理文件路径，移除异常后缀
-     * 参考FileOperationHandler中的cleanFilePath方法
+     * Clean file path, remove abnormal suffixes
+     * Reference cleanFilePath method in FileOperationHandler
      */
     private fun cleanFilePath(path: String): String {
         var cleaned = path
 
-        // 移除异常的.git后缀
+        // Remove abnormal .git suffix
         if (cleaned.endsWith(".git")) {
             cleaned = cleaned.removeSuffix(".git")
         }
 
-        // 移除其他可能的异常后缀
+        // Remove other possible abnormal suffixes
         val abnormalSuffixes = listOf(".tmp", ".bak", ".swp")
         for (suffix in abnormalSuffixes) {
             if (cleaned.endsWith(suffix)) {
@@ -108,34 +108,34 @@ data class EditorState(
     }
 
     /**
-     * 转换路径为IDEA格式
-     * 处理跨平台路径兼容性，确保路径格式统一
+     * Convert path to IDEA format
+     * Handle cross-platform path compatibility, ensure unified path format
      */
     private fun convertToIdeaFormat(path: String): String {
         var ideaPath = path
 
-        // 获取操作系统信息
+        // Get operating system information
         val osName = System.getProperty("os.name").lowercase()
         val isWindows = osName.contains("windows")
         val isMacOS = osName.contains("mac")
         val isLinux = osName.contains("linux") || osName.contains("unix")
 
         if (isWindows) {
-            // Windows: 将反斜杠替换为正斜杠，处理盘符大小写
+            // Windows: Replace backslashes with forward slashes, handle drive letter case
             ideaPath = ideaPath.replace('\\', '/')
             if (ideaPath.matches(Regex("^[a-z]:/.*")) || ideaPath.matches(Regex("^[a-z]:.*"))) {
                 ideaPath = ideaPath[0].uppercaseChar() + ideaPath.substring(1)
             }
         } else if (isMacOS || isLinux) {
-            // macOS/Linux: 确保使用正斜杠，保持Unix路径格式
+            // macOS/Linux: Ensure using forward slashes, maintain Unix path format
             ideaPath = ideaPath.replace('\\', '/')
 
-            // 确保路径以 / 开头（Unix绝对路径）
+            // Ensure path starts with / (Unix absolute path)
             if (!ideaPath.startsWith('/')) {
                 ideaPath = "/$ideaPath"
             }
 
-            // 清理重复的斜杠
+            // Clean up duplicate slashes
             ideaPath = ideaPath.replace(Regex("/+"), "/")
         }
 
@@ -143,8 +143,8 @@ data class EditorState(
     }
 
     /**
-     * 检查是否有选中范围
-     * @return 如果有选中范围返回true，否则返回false
+     * Check if there is a selection range
+     * @return Returns true if there is a selection range, otherwise returns false
      */
     fun hasSelection(): Boolean {
         return selectionStartLine != null &&
@@ -160,26 +160,26 @@ data class EditorState(
     }
 
     /**
-     * 获取格式化的光标位置字符串
-     * @return 格式化的光标位置字符串
+     * Get formatted cursor position string
+     * @return Formatted cursor position string
      */
     fun getCursorLog(): String {
         return LogFormatter.cursorLog(line, column)
     }
 
     /**
-     * 获取格式化的光标位置字符串
-     * @return 格式化的光标位置字符串
+     * Get formatted cursor position string
+     * @return Formatted cursor position string
      */
     fun getCursor(): String {
-        return LogFormatter.cursor(line, column) ?: "无"
+        return LogFormatter.cursor(line, column) ?: "none"
     }
 }
 
 /**
- * 格式化时间戳为标准格式
- * @param timestamp 时间戳（毫秒），默认为当前时间
- * @return 格式化的时间字符串 (yyyy-MM-dd HH:mm:ss.SSS)
+ * Format timestamp to standard format
+ * @param timestamp Timestamp (milliseconds), defaults to current time
+ * @return Formatted time string (yyyy-MM-dd HH:mm:ss.SSS)
  */
 fun formatTimestamp(timestamp: Long = System.currentTimeMillis()): String {
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
@@ -187,41 +187,41 @@ fun formatTimestamp(timestamp: Long = System.currentTimeMillis()): String {
 }
 
 /**
- * 位置格式化工具类
- * 提供光标位置和选中范围的统一格式化方法
+ * Position formatting utility class
+ * Provides unified formatting methods for cursor position and selection range
  */
 object LogFormatter {
 
     /**
-     * 格式化光标位置
-     * @param line 行号（从0开始）
-     * @param column 列号（从0开始）
-     * @return 格式化的光标位置字符串："行X,列Y"
+     * Format cursor position
+     * @param line Line number (starts from 0)
+     * @param column Column number (starts from 0)
+     * @return Formatted cursor position string: "line X, column Y"
      */
     fun cursor(line: Int?, column: Int?): String? {
         if (line == null || column == null) {
             return null;
         }
-        return "行${line + 1},列${column + 1}"
+        return "line${line + 1},column${column + 1}"
     }
 
     /**
-     * 格式化光标位置日志信息
-     * @param line 行号（从0开始）
-     * @param column 列号（从0开始）
-     * @return 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     * Format cursor position log information
+     * @param line Line number (starts from 0)
+     * @param column Column number (starts from 0)
+     * @return Formatted cursor position log string: "Cursor position: line X, column Y"
      */
     fun cursorLog(line: Int?, column: Int?): String {
-        return "光标位置：${cursor(line, column) ?: "无"}"
+        return "Cursor position: ${cursor(line, column) ?: "none"}"
     }
 
     /**
-     * 格式化选中范围
-     * @param startLine 开始行号（从0开始）
-     * @param startColumn 开始列号（从0开始）
-     * @param endLine 结束行号（从0开始）
-     * @param endColumn 结束列号（从0开始）
-     * @return 格式化的选中范围字符串："startLine,startColumn-endLine,endColumn"
+     * Format selection range
+     * @param startLine Start line number (starts from 0)
+     * @param startColumn Start column number (starts from 0)
+     * @param endLine End line number (starts from 0)
+     * @param endColumn End column number (starts from 0)
+     * @return Formatted selection range string: "startLine,startColumn-endLine,endColumn"
      */
     fun selection(startLine: Int?, startColumn: Int?, endLine: Int?, endColumn: Int?): String? {
         if (startLine == null || startColumn == null || endLine == null || endColumn == null) {
@@ -232,14 +232,14 @@ object LogFormatter {
 
 
     fun selectionLog(startLine: Int?, startColumn: Int?, endLine: Int?, endColumn: Int?): String {
-        return "选中范围：${selection(startLine, startColumn, endLine, endColumn) ?: "无"}"
+        return "Selection range: ${selection(startLine, startColumn, endLine, endColumn) ?: "none"}"
     }
 }
 
 /**
- * 解析时间戳字符串为毫秒数
- * @param timestampStr 时间戳字符串
- * @return 毫秒数
+ * Parse timestamp string to milliseconds
+ * @param timestampStr Timestamp string
+ * @return Milliseconds
  */
 fun parseTimestamp(timestampStr: String): Long {
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
@@ -247,7 +247,7 @@ fun parseTimestamp(timestampStr: String): Long {
 }
 
 
-// 回调接口
+// Callback interface
 interface ConnectionCallback {
     fun onConnected()
 
@@ -257,8 +257,16 @@ interface ConnectionCallback {
 }
 
 /**
- * 消息包装器数据类
- * 用于组播消息的统一包装和处理
+ * Message sender interface
+ * Used to abstract message sending functionality of MulticastManager and TcpServerManager
+ */
+interface MessageSender {
+    fun sendMessage(messageWrapper: MessageWrapper): Boolean
+}
+
+/**
+ * Message wrapper data class
+ * Used for unified packaging and processing of multicast messages
  */
 data class MessageWrapper(
     val messageId: String,
@@ -270,8 +278,8 @@ data class MessageWrapper(
         private val gson = com.google.gson.Gson()
 
         /**
-         * 创建消息包装器
-         * 注意：messageId 现在通过 LocalIdentifierManager.generateMessageId() 生成
+         * Create message wrapper
+         * Note: messageId is now generated through LocalIdentifierManager.generateMessageId()
          */
         fun create(messageId: String, localIdentifier: String, payload: EditorState): MessageWrapper {
             return MessageWrapper(
@@ -283,7 +291,7 @@ data class MessageWrapper(
         }
 
         /**
-         * 从JSON字符串解析MessageWrapper
+         * Parse MessageWrapper from JSON string
          */
         fun fromJsonString(jsonString: String): MessageWrapper? {
             return try {
@@ -295,14 +303,14 @@ data class MessageWrapper(
     }
 
     /**
-     * 转换为JSON字符串
+     * Convert to JSON string
      */
     fun toJsonString(): String {
         return MessageWrapper.gson.toJson(this)
     }
 
     /**
-     * 检查是否是自己发送的消息
+     * Check if message was sent by self
      */
     fun isOwnMessage(localIdentifier: String): Boolean {
         return senderId == localIdentifier

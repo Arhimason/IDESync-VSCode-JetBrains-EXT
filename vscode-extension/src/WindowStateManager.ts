@@ -2,20 +2,20 @@ import * as vscode from 'vscode';
 import {Logger} from './Logger';
 
 /**
- * 窗口状态管理器
- * 统一管理窗口活跃状态，提供高效且准确的状态查询
- * 结合事件监听的高性能和实时查询的准确性优势
+ * Window state manager
+ * Unified management of window active state, providing efficient and accurate state queries
+ * Combines high performance of event listening with accuracy advantages of real-time queries
  */
 export class WindowStateManager {
     private logger: Logger;
 
-    // 事件监听维护的状态缓存（高性能查询）
+    // State cache maintained by event listening (high performance queries)
     private isActiveCache: boolean = true;
 
-    // 状态变化回调
+    // State change callback
     private onWindowStateChange?: (isActive: boolean) => void;
 
-    // 事件监听器的清理函数
+    // Cleanup function for event listeners
     private disposable?: vscode.Disposable;
 
     constructor(logger: Logger) {
@@ -23,7 +23,7 @@ export class WindowStateManager {
     }
 
     /**
-     * 获取工作区名称
+     * Get workspace name
      */
     private getWorkspaceName(): string {
         try {
@@ -38,100 +38,100 @@ export class WindowStateManager {
     }
 
     /**
-     * 初始化窗口状态监听
+     * Initialize window state listening
      */
     initialize(): void {
         const workspaceName = this.getWorkspaceName();
-        this.logger.info(`初始化窗口状态管理器: ${workspaceName}`);
+        this.logger.info(`Initializing window state manager: ${workspaceName}`);
         this.setupWindowFocusListener();
-        // 初始化时获取真实状态
+        // Get real-time state during initialization
         this.isActiveCache = this.getRealTimeWindowState();
-        this.logger.info(`窗口状态管理器初始化完成: ${workspaceName}，当前状态: ${this.isActiveCache}`);
+        this.logger.info(`Window state manager initialization completed: ${workspaceName}, current state: ${this.isActiveCache}`);
     }
 
     /**
-     * 设置窗口焦点监听器
+     * Set up window focus listener
      */
     private setupWindowFocusListener(): void {
         const workspaceName = this.getWorkspaceName();
         this.disposable = vscode.window.onDidChangeWindowState((e) => {
             this.updateWindowState(e.focused);
             if (e.focused) {
-                this.logger.info(`VSCode窗口获得焦点: ${workspaceName}`);
+                this.logger.info(`VSCode window gained focus: ${workspaceName}`);
             } else {
-                this.logger.info(`VSCode窗口失去焦点: ${workspaceName}`);
+                this.logger.info(`VSCode window lost focus: ${workspaceName}`);
             }
         });
     }
 
     /**
-     * 更新窗口状态并触发回调
+     * Update window state and trigger callback
      */
     private updateWindowState(isActive: boolean): void {
         const previousState = this.isActiveCache;
         this.isActiveCache = isActive;
 
-        // 状态发生变化时触发回调
+        // Trigger callback when state changes
         if (previousState !== isActive) {
             this.onWindowStateChange?.(isActive);
         }
     }
 
     /**
-     * 获取窗口活跃状态（高性能版本）
-     * 大多数情况下使用事件监听维护的缓存状态
-     * @param forceRealTime 是否强制实时查询，默认false
-     * @return 窗口是否活跃
+     * Get window active state (high performance version)
+     * Uses cache state maintained by event listening in most cases
+     * @param forceRealTime Whether to force real-time query, defaults to false
+     * @return Whether window is active
      */
     isWindowActive(forceRealTime: boolean = false): boolean {
         if (forceRealTime) {
-            // 强制实时查询，用于关键操作或状态验证
+            // Force real-time query, used for critical operations or state validation
             const realTimeState = this.getRealTimeWindowState();
 
-            // 如果发现缓存状态与实时状态不一致，更新缓存
+            // If cache state is inconsistent with real-time state, update cache
             const cachedState = this.isActiveCache;
             if (cachedState !== realTimeState) {
-                this.logger.warn(`检测到状态不一致，缓存: ${cachedState}, 实时: ${realTimeState}，正在同步`);
+                this.logger.warn(`Detected state inconsistency, cache: ${cachedState}, real-time: ${realTimeState}, syncing`);
                 this.updateWindowState(realTimeState);
             }
 
             return realTimeState;
         } else {
-            // 使用高性能的缓存状态
+            // Use high-performance cache state
             return this.isActiveCache;
         }
     }
 
     /**
-     * 实时获取窗口状态
-     * 直接从VSCode API获取，确保状态准确性
+     * Get window state in real-time
+     * Directly get from VSCode API to ensure state accuracy
      */
     private getRealTimeWindowState(): boolean {
         try {
             return vscode.window.state.focused;
         } catch (error) {
-            this.logger.warn('获取实时窗口状态失败:', error as Error);
-            // 获取失败时返回缓存状态
+            this.logger.warn('Failed to get real-time window state:', error as Error);
+            // Return cache state when getting fails
             return this.isActiveCache;
         }
     }
 
     /**
-     * 设置窗口状态变化回调
-     * @param callback 状态变化时的回调函数，参数为新的活跃状态
+     * Set window state change callback
+     * @param callback Callback function when state changes, parameter is new active state
      */
     setOnWindowStateChangeCallback(callback: (isActive: boolean) => void): void {
         this.onWindowStateChange = callback;
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     dispose(): void {
         const workspaceName = this.getWorkspaceName()
-        this.logger.info(`开始清理窗口状态管理器资源: ${workspaceName}`);
+        this.logger.info(`Starting to clean up window state manager resources: ${workspaceName}`);
 
         this.disposable?.dispose();
-        this.logger.info(`同步服务资源清理完成`);
+        this.logger.info(`Window state manager resource cleanup completed`);
     }
 }

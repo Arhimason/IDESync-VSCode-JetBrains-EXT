@@ -9,30 +9,30 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.Timer
 
 /**
- * 窗口状态管理器
- * 统一管理窗口活跃状态，提供高效且准确的状态查询
- * 结合事件监听的高性能和实时查询的准确性优势
+ * Window state manager
+ * Unifies management of window active state, providing efficient and accurate state queries
+ * Combines the high performance of event listening with the accuracy of real-time queries
  */
 class WindowStateManager(private val project: Project) {
     private val log: Logger = Logger.getInstance(WindowStateManager::class.java)
 
-    // 事件监听维护的状态缓存（高性能查询）
+    // State cache maintained by event listening (high performance query)
     private val isActiveCache = AtomicBoolean(true)
 
-    // 状态变化回调
+    // State change callback
     private var onWindowStateChange: ((Boolean) -> Unit)? = null
 
-    // Frame获取重试配置
-    private val maxRetryCount = 10  // 最大重试次数
-    private val retryDelayMs = 500  // 重试间隔（毫秒）
+    // Frame acquisition retry configuration
+    private val maxRetryCount = 10  // Maximum retry count
+    private val retryDelayMs = 500  // Retry interval (milliseconds)
     private var currentRetryCount = 0
     private var retryTimer: Timer? = null
 
-    // 标记监听器是否已成功设置
+    // Mark whether listener has been successfully set up
     private var isListenerSetup = false
 
     /**
-     * 获取项目名称
+     * Get project name
      */
     private fun getWorkspaceName(): String {
         return try {
@@ -43,163 +43,163 @@ class WindowStateManager(private val project: Project) {
     }
 
     /**
-     * 初始化窗口状态监听
+     * Initialize window state listening
      */
     fun initialize() {
         val workspaceName = getWorkspaceName()
-        log.info("初始化窗口状态管理器: $workspaceName")
+        log.info("Initializing window state manager: $workspaceName")
 
-        // 延迟初始化Frame监听器，确保窗口已完全创建
+        // Delay initialization of Frame listener to ensure window is fully created
         ApplicationManager.getApplication().invokeLater {
             setupWindowFocusListenerWithRetry()
         }
 
-        // 初始化时获取真实状态
+        // Get real state during initialization
         isActiveCache.set(getRealTimeWindowState())
-        log.info("窗口状态管理器初始化完成: $workspaceName，当前状态: ${isActiveCache.get()}")
+        log.info("Window state manager initialization completed: $workspaceName, current state: ${isActiveCache.get()}")
     }
 
     /**
-     * 带重试机制的窗口焦点监听器设置
+     * Window focus listener setup with retry mechanism
      */
     private fun setupWindowFocusListenerWithRetry() {
         val workspaceName = getWorkspaceName()
         if (isListenerSetup) {
-            log.info("窗口焦点监听器已经设置完成，跳过重复设置: $workspaceName")
+            log.info("Window focus listener already set up, skipping duplicate setup: $workspaceName")
             return
         }
 
         val frame = WindowManager.getInstance().getFrame(project)
         if (frame != null) {
-            log.info("成功获取到窗口Frame，设置焦点监听器: $workspaceName")
+            log.info("Successfully obtained window Frame, setting up focus listener: $workspaceName")
             setupWindowFocusListener(frame)
             isListenerSetup = true
             currentRetryCount = 0
 
-            // 停止重试定时器
+            // Stop retry timer
             retryTimer?.stop()
             retryTimer = null
         } else {
             currentRetryCount++
-            log.warn("无法获取窗口Frame: $workspaceName，重试次数: $currentRetryCount/$maxRetryCount")
+            log.warn("Unable to obtain window Frame: $workspaceName, retry count: $currentRetryCount/$maxRetryCount")
 
             if (currentRetryCount < maxRetryCount) {
-                // 设置定时器重试
+                // Set timer for retry
                 retryTimer = Timer(retryDelayMs) {
                     setupWindowFocusListenerWithRetry()
                 }
                 retryTimer?.isRepeats = false
                 retryTimer?.start()
-                log.info("将在${retryDelayMs}ms后重试获取Frame: $workspaceName")
+                log.info("Will retry obtaining Frame in ${retryDelayMs}ms: $workspaceName")
             } else {
-                log.error("达到最大重试次数，放弃设置窗口焦点监听器: $workspaceName")
+                log.error("Reached maximum retry count, giving up on setting up window focus listener: $workspaceName")
             }
         }
     }
 
     /**
-     * 设置窗口焦点监听器（实际设置逻辑）
+     * Set up window focus listener (actual setup logic)
      */
     private fun setupWindowFocusListener(frame: Frame) {
         val workspaceName = getWorkspaceName()
-        log.info("正在为项目设置窗口焦点监听器: $workspaceName")
+        log.info("Setting up window focus listener for project: $workspaceName")
 
         frame.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
             override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {
                 if (frame.isVisible && frame.state != Frame.ICONIFIED && frame.isFocused) {
                     updateWindowState(true)
-                    log.info("Jetbrains窗口获得焦点: $workspaceName")
+                    log.info("JetBrains window gained focus: $workspaceName")
                 }
             }
 
             override fun windowLostFocus(e: java.awt.event.WindowEvent?) {
                 updateWindowState(false)
-                log.info("Jetbrains窗口失去焦点: $workspaceName")
+                log.info("JetBrains window lost focus: $workspaceName")
             }
         })
 
-        log.info("窗口焦点监听器设置成功: $workspaceName")
+        log.info("Window focus listener setup successful: $workspaceName")
     }
 
     /**
-     * 更新窗口状态并触发回调
+     * Update window state and trigger callback
      */
     private fun updateWindowState(isActive: Boolean) {
         val previousState = isActiveCache.get()
         isActiveCache.set(isActive)
 
-        // 状态发生变化时触发回调
+        // Trigger callback when state changes
         if (previousState != isActive) {
             onWindowStateChange?.invoke(isActive)
         }
     }
 
     /**
-     * 获取窗口活跃状态（高性能版本）
-     * 大多数情况下使用事件监听维护的缓存状态
-     * @param forceRealTime 是否强制实时查询，默认false
-     * @return 窗口是否活跃
+     * Get window active state (high performance version)
+     * In most cases, use cache state maintained by event listening
+     * @param forceRealTime Whether to force real-time query, default false
+     * @return Whether window is active
      */
     fun isWindowActive(forceRealTime: Boolean = false): Boolean {
         return if (forceRealTime) {
-            // 强制实时查询，用于关键操作或状态验证
+            // Force real-time query, used for critical operations or state verification
             val realTimeState = getRealTimeWindowState()
 
-            // 如果发现缓存状态与实时状态不一致，更新缓存
+            // If the cache state is inconsistent with the real-time state, update the cache
             val cachedState = isActiveCache.get()
             if (cachedState != realTimeState) {
-                log.warn("检测到状态不一致，缓存: $cachedState, 实时: $realTimeState，正在同步")
+                log.warn("Detected state inconsistency, cache: $cachedState, real-time: $realTimeState, syncing")
                 updateWindowState(realTimeState)
             }
 
             realTimeState
         } else {
-            // 使用高性能的缓存状态
+            // Use high performance cache state
             isActiveCache.get()
         }
     }
 
     /**
-     * 实时获取窗口状态
-     * 直接从系统API获取，确保状态准确性
+     * Get window state in real-time
+     * Get directly from system API to ensure state accuracy
      */
     private fun getRealTimeWindowState(): Boolean {
         return try {
             val frame = WindowManager.getInstance().getFrame(project)
             frame?.isFocused == true && frame.isVisible && frame.state != Frame.ICONIFIED
         } catch (e: Exception) {
-            log.warn("获取实时窗口状态失败: ${e.message}")
+            log.warn("Failed to get real-time window state: ${e.message}")
             isActiveCache.get()
         }
     }
 
     /**
-     * 设置窗口状态变化回调
-     * @param callback 状态变化时的回调函数，参数为新的活跃状态
+     * Set window state change callback
+     * @param callback Callback function when state changes, parameter is new active state
      */
     fun setOnWindowStateChangeCallback(callback: (Boolean) -> Unit) {
         this.onWindowStateChange = callback
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     fun dispose() {
         val workspaceName = getWorkspaceName()
-        log.info("开始清理窗口状态管理器资源: $workspaceName")
+        log.info("Starting to clean up window state manager resources: $workspaceName")
 
-        // 停止重试定时器
+        // Stop retry timer
         retryTimer?.stop()
         retryTimer = null
 
-        // 清理回调
+        // Clean up callback
         onWindowStateChange = null
 
-        // 重置状态
+        // Reset state
         isListenerSetup = false
         currentRetryCount = 0
 
-        log.info("窗口状态管理器资源清理完成: $workspaceName")
+        log.info("Window state manager resource cleanup completed: $workspaceName")
     }
 
 }

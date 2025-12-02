@@ -10,8 +10,8 @@ import javax.swing.Timer
 import kotlin.concurrent.write
 
 /**
- * 编辑器状态管理器
- * 负责管理编辑器状态的缓存、防抖和去重逻辑
+ * Editor State Manager
+ * Responsible for managing editor state caching, debouncing and deduplication logic
  */
 class EditorStateManager(
     private val project: Project,
@@ -19,18 +19,18 @@ class EditorStateManager(
 ) {
     private val log: Logger = Logger.getInstance(EditorStateManager::class.java)
 
-    // 按文件路径分组的防抖定时器
+    // Debounce timers grouped by file path
     private val debounceTimers: ConcurrentHashMap<String, Timer> = ConcurrentHashMap()
 
-    // 读写锁，保护定时器操作的原子性
+    // Read-write lock, protecting atomicity of timer operations
     private val timersLock = ReentrantReadWriteLock()
 
-    // 防抖延迟
+    // Debounce delay
     private val debounceDelayMs = 300
 
     private var stateChangeCallback: StateChangeCallback? = null
 
-    // 回调接口
+    // Callback interface
     interface StateChangeCallback {
         fun onStateChanged(state: EditorState)
     }
@@ -40,7 +40,7 @@ class EditorStateManager(
     }
 
     /**
-     * 创建编辑器状态对象
+     * Create editor state object
      */
     fun createEditorState(
         editor: Editor,
@@ -50,7 +50,7 @@ class EditorStateManager(
     ): EditorState {
         val (line, column) = fileUtils.getEditorCursorPosition(editor)
 
-        // 获取选中范围坐标
+        // Get selection range coordinates
         val selectionCoordinates = fileUtils.getSelectionCoordinates(editor)
 
         return EditorState(
@@ -70,7 +70,7 @@ class EditorStateManager(
     }
 
     /**
-     * 创建关闭状态对象
+     * Create close state object
      */
     fun createCloseState(filePath: String, isActive: Boolean = false): EditorState {
         return EditorState(
@@ -86,7 +86,7 @@ class EditorStateManager(
 
 
     /**
-     * 创建工作区同步状态
+     * Create workspace sync state
      */
     fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
         val (editor, file) = fileUtils.getCurrentActiveEditorAndFile()
@@ -109,7 +109,7 @@ class EditorStateManager(
                 selectionEndColumn = null
             )
         } else {
-            // 没有活跃编辑器时，使用空的文件路径和位置
+            // When there is no active editor, use empty file path and position
             EditorState(
                 action = ActionType.WORKSPACE_SYNC,
                 filePath = "",
@@ -128,38 +128,38 @@ class EditorStateManager(
     }
 
     /**
-     * 清理指定文件路径的防抖定时器
-     * 使用写锁确保操作原子性
+     * Clear debounce timer for specified file path
+     * Use write lock to ensure operation atomicity
      */
     private fun clearDebounceTimer(filePath: String) {
         timersLock.write {
             val timer = debounceTimers.remove(filePath)
             if (timer != null) {
                 timer.stop()
-                log.debug("清理文件防抖定时器: $filePath")
+                log.debug("Clearing file debounce timer: $filePath")
             }
         }
     }
 
     /**
-     * 防抖更新状态
+     * Debounced update state
      */
     fun debouncedUpdateState(state: EditorState) {
         val filePath = state.filePath
 
         timersLock.write {
-            // 清除该文件之前的防抖定时器
+            // Clear previous debounce timer for this file
             val oldTimer = debounceTimers.remove(filePath)
             oldTimer?.stop()
 
-            // 创建新的防抖定时器
+            // Create new debounce timer
             val timer = Timer(debounceDelayMs) {
                 try {
                     updateState(state)
                 } catch (e: Exception) {
-                    log.warn("更新状态时发生错误", e)
+                    log.warn("Error occurred while updating state", e)
                 } finally {
-                    // 无论是否发生异常，都要清理定时器，防止内存泄漏
+                    // Regardless of whether an exception occurs, clean up the timer to prevent memory leaks
                     timersLock.write {
                         debounceTimers.remove(filePath)
                     }
@@ -173,30 +173,30 @@ class EditorStateManager(
     }
 
     /**
-     * 立即更新状态（无防抖）
+     * Update state immediately (no debounce)
      */
     fun updateState(state: EditorState) {
-        // 如果是文件关闭操作，立即清理防抖定时器
+        // If it's a file close operation, immediately clear debounce timer
         if (state.action == ActionType.CLOSE) {
             clearDebounceTimer(state.filePath)
         }
-        // 通知状态变化
+        // Notify state change
         stateChangeCallback?.onStateChanged(state)
     }
 
     /**
-     * 发送当前状态
+     * Send current state
      */
     fun sendCurrentState(isActive: Boolean) {
         val currentState = getCurrentActiveEditorState(isActive);
         if (currentState != null) {
             this.updateState(currentState)
-            log.info("发送当前状态: ${currentState.filePath}")
+            log.info("Sending current state: ${currentState.filePath}")
         }
     }
 
     /**
-     * 获取当前活跃编辑器的状态
+     * Get current active editor state
      */
     fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
         return try {
@@ -205,7 +205,7 @@ class EditorStateManager(
             if (editor != null && file != null && fileUtils.isRegularFile(file)) {
                 val position = fileUtils.getEditorCursorPosition(editor)
 
-                // 获取选中范围坐标
+                // Get selection range coordinates
                 val selectionCoordinates = fileUtils.getSelectionCoordinates(editor)
 
                 EditorState(
@@ -226,26 +226,26 @@ class EditorStateManager(
                 null
             }
         } catch (e: Exception) {
-            log.warn("获取当前活跃编辑器状态失败: ${e.message}", e)
+            log.warn("Failed to get current active editor state: ${e.message}", e)
             null
         }
     }
 
     /**
-     * 清理资源
+     * Clean up resources
      */
     fun dispose() {
-        log.info("开始清理编辑器状态管理器资源")
+        log.info("Starting to clean up editor state manager resources")
 
         timersLock.write {
-            // 清理所有防抖定时器
+            // Clean up all debounce timers
             for ((filePath, timer) in debounceTimers) {
                 timer.stop()
-                log.debug("清理防抖定时器: $filePath")
+                log.debug("Cleaning debounce timer: $filePath")
             }
             debounceTimers.clear()
         }
 
-        log.info("编辑器状态管理器资源清理完成")
+        log.info("Editor state manager resource cleanup completed")
     }
 }

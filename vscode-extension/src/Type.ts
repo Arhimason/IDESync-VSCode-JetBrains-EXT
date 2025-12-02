@@ -1,54 +1,54 @@
 /**
- * 操作类型枚举
- * 定义编辑器同步过程中的各种操作类型
- * 使用字符串枚举确保JSON序列化兼容性
+ * Action type enumeration
+ * Defines various operation types during editor synchronization
+ * Uses string enumeration to ensure JSON serialization compatibility
  */
 export enum ActionType {
-    CLOSE = "CLOSE",        // 关闭文件
-    OPEN = "OPEN",          // 打开文件
-    NAVIGATE = "NAVIGATE",  // 光标导航和代码选中
-    WORKSPACE_SYNC = "WORKSPACE_SYNC"  // 工作区状态同步
+    CLOSE = "CLOSE",        // Close file
+    OPEN = "OPEN",          // Open file
+    NAVIGATE = "NAVIGATE",  // Cursor navigation and code selection
+    WORKSPACE_SYNC = "WORKSPACE_SYNC"  // Workspace state synchronization
 }
 
 /**
- * 消息来源枚举
- * 定义消息的发送方
+ * Message source enumeration
+ * Defines the sender of the message
  */
 export enum SourceType {
-    VSCODE = "VSCODE",       // VSCode编辑器
+    VSCODE = "VSCODE",       // VSCode editor
     JETBRAINS = "JETBRAINS"  // JetBrains IDE
 }
 
 /**
- * 连接状态枚举
- * 定义WebSocket连接的各种状态
+ * Connection state enumeration
+ * Defines various states of WebSocket connection
  */
 export enum ConnectionState {
-    DISCONNECTED = "DISCONNECTED",  // 已断开连接
-    CONNECTING = "CONNECTING",      // 正在连接
-    CONNECTED = "CONNECTED"         // 已连接
+    DISCONNECTED = "DISCONNECTED",  // Disconnected
+    CONNECTING = "CONNECTING",      // Connecting
+    CONNECTED = "CONNECTED"         // Connected
 }
 
 /**
- * 编辑器状态类
- * 用于在VSCode和JetBrains之间传递编辑器状态
+ * Editor state class
+ * Used to pass editor state between VSCode and JetBrains
  */
 export class EditorState {
-    public action: ActionType;        // 操作类型枚举（必填）
-    public filePath: string;          // 文件路径
-    public line: number;              // 行号（从0开始）
-    public column: number;            // 列号（从0开始）
-    public source: SourceType;        // 消息来源枚举
-    public isActive: boolean;         // IDE是否处于活跃状态
-    public timestamp: string;         // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
-    public openedFiles?: string[];    // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
-    // 选中范围相关字段（NAVIGATE类型使用）
-    public selectionStartLine?: number;    // 选中开始行号（从0开始）
-    public selectionStartColumn?: number;  // 选中开始列号（从0开始）
-    public selectionEndLine?: number;      // 选中结束行号（从0开始）
-    public selectionEndColumn?: number;    // 选中结束列号（从0开始）
+    public action: ActionType;        // Action type enumeration (required)
+    public filePath: string;          // File path
+    public line: number;              // Line number (starts from 0)
+    public column: number;            // Column number (starts from 0)
+    public source: SourceType;        // Message source enumeration
+    public isActive: boolean;         // Whether IDE is in active state
+    public timestamp: string;         // Timestamp (yyyy-MM-dd HH:mm:ss.SSS)
+    public openedFiles?: string[];    // All opened files in workspace (only used by WORKSPACE_SYNC type)
+    // Selection range related fields (used by NAVIGATE type)
+    public selectionStartLine?: number;    // Selection start line number (starts from 0)
+    public selectionStartColumn?: number;  // Selection start column number (starts from 0)
+    public selectionEndLine?: number;      // Selection end line number (starts from 0)
+    public selectionEndColumn?: number;    // Selection end column number (starts from 0)
 
-    // 平台兼容路径缓存
+    // Platform compatible path cache
     private _compatiblePath?: string;
 
     constructor(
@@ -80,42 +80,42 @@ export class EditorState {
     }
 
     /**
-     * 获取平台兼容的文件路径
-     * 首次调用时会清理和转换原始路径，并缓存结果
-     * 后续调用直接返回缓存的路径
+     * Get platform compatible file path
+     * On first call, it cleans and transforms the original path and caches the result
+     * Subsequent calls directly return the cached path
      */
     getCompatiblePath(): string {
-        // 如果已经缓存，直接返回
+        // If already cached, return directly
         if (this._compatiblePath) {
             return this._compatiblePath;
         }
 
-        // 首次调用，进行路径清理和转换
+        // First call, perform path cleaning and conversion
         const cleaned = this.cleanFilePath(this.filePath);
         const converted = this.convertToVSCodeFormat(cleaned);
         this._compatiblePath = converted;
 
-        // 输出日志（如果路径发生了变化）
+        // Output log (if path has changed)
         if (converted !== this.filePath) {
-            console.log(`EditorState: 路径已转换 ${this.filePath} -> ${converted}`);
+            console.log(`EditorState: Path converted ${this.filePath} -> ${converted}`);
         }
 
         return converted;
     }
 
     /**
-     * 清理文件路径，移除异常后缀
-     * 参考FileOperationHandler中的cleanFilePath方法
+     * Clean file path, remove abnormal suffixes
+     * Reference cleanFilePath method in FileOperationHandler
      */
     private cleanFilePath(path: string): string {
         let cleaned = path;
 
-        // 移除异常的.git后缀
+        // Remove abnormal .git suffix
         if (cleaned.endsWith('.git')) {
             cleaned = cleaned.slice(0, -4);
         }
 
-        // 移除其他可能的异常后缀
+        // Remove other possible abnormal suffixes
         const abnormalSuffixes = ['.tmp', '.bak', '.swp'];
         for (const suffix of abnormalSuffixes) {
             if (cleaned.endsWith(suffix)) {
@@ -128,39 +128,39 @@ export class EditorState {
     }
 
     /**
-     * 转换路径为VSCode格式
-     * 处理跨平台路径兼容性
+     * Convert path to VSCode format
+     * Handle cross-platform path compatibility
      */
     private convertToVSCodeFormat(path: string): string {
         let vscodePath = path;
 
-        // 检测操作系统平台
+        // Detect operating system platform
         const isWindows = process.platform === 'win32';
         const isMacOS = process.platform === 'darwin';
         const isLinux = process.platform === 'linux';
 
         if (isWindows) {
-            // Windows: 将正斜杠替换为反斜杠，盘符转小写
+            // Windows: Replace forward slashes with backslashes, drive letter to lowercase
             vscodePath = vscodePath.replace(/\//g, '\\');
             if (/^[A-Z]:\\/.test(vscodePath) || /^[A-Z]:/.test(vscodePath)) {
                 vscodePath = vscodePath[0].toLowerCase() + vscodePath.substring(1);
             }
         } else if (isMacOS || isLinux) {
-            // macOS/Linux: 确保使用正斜杠，移除Windows盘符格式
+            // macOS/Linux: Ensure using forward slashes, remove Windows drive letter format
             vscodePath = vscodePath.replace(/\\/g, '/');
 
-            // 移除Windows盘符（如果存在）并转换为Unix路径
+            // Remove Windows drive letter (if exists) and convert to Unix path
             if (/^[A-Za-z]:[\/\\]/.test(vscodePath)) {
-                // 例如: C:/Users/... -> /Users/... 或 c:\Users\... -> /Users/...
+                // For example: C:/Users/... -> /Users/... or c:\Users\... -> /Users/...
                 vscodePath = vscodePath.substring(2).replace(/\\/g, '/');
             }
 
-            // 确保路径以 / 开头
+            // Ensure path starts with /
             if (!vscodePath.startsWith('/')) {
                 vscodePath = '/' + vscodePath;
             }
 
-            // 清理重复的斜杠
+            // Clean up duplicate slashes
             vscodePath = vscodePath.replace(/\/+/g, '/');
         }
 
@@ -168,8 +168,8 @@ export class EditorState {
     }
 
     /**
-     * 检查是否有选中范围
-     * @returns 如果有选中范围返回true，否则返回false
+     * Check if there is a selection range
+     * @returns Returns true if there is a selection range, otherwise returns false
      */
     hasSelection(): boolean {
         return this.selectionStartLine !== undefined &&
@@ -179,35 +179,35 @@ export class EditorState {
     }
 
     /**
-     * 获取格式化的选中范围日志字符串
-     * @returns 格式化的选中范围日志字符串："选中范围：X"
+     * Get formatted selection range log string
+     * @returns Formatted selection range log string: "Selection range: X"
      */
     getSelectionLog(): string {
         return LogFormatter.selectionLog(this.selectionStartLine, this.selectionStartColumn, this.selectionEndLine, this.selectionEndColumn);
     }
 
     /**
-     * 获取格式化的光标位置日志字符串
-     * @returns 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     * Get formatted cursor position log string
+     * @returns Formatted cursor position log string: "Cursor position: line X, column Y"
      */
     getCursorLog(): string {
         return LogFormatter.cursorLog(this.line, this.column);
     }
 
     /**
-     * 获取格式化的光标位置字符串
-     * @return 格式化的光标位置字符串
+     * Get formatted cursor position string
+     * @return Formatted cursor position string
      */
     getCursor(): string {
-        return LogFormatter.cursor(this.line, this.column) || "无";
+        return LogFormatter.cursor(this.line, this.column) || "none";
     }
 }
 
 
 /**
- * 格式化时间戳为标准格式
- * @param timestamp 时间戳（毫秒）
- * @returns 格式化的时间字符串 (yyyy-MM-dd HH:mm:ss.SSS)
+ * Format timestamp to standard format
+ * @param timestamp Timestamp (milliseconds)
+ * @returns Formatted time string (yyyy-MM-dd HH:mm:ss.SSS)
  */
 export function formatTimestamp(timestamp?: number): string {
     const date = new Date(timestamp || Date.now());
@@ -223,41 +223,41 @@ export function formatTimestamp(timestamp?: number): string {
 }
 
 /**
- * 位置格式化工具类
- * 提供光标位置和选中范围的统一格式化方法
+ * Position formatting utility class
+ * Provides unified formatting methods for cursor position and selection range
  */
 export class LogFormatter {
 
     /**
-     * 格式化光标位置
-     * @param line 行号（从0开始）
-     * @param column 列号（从0开始）
-     * @returns 格式化的光标位置字符串："行X,列Y"，如果参数为undefined则返回null
+     * Format cursor position
+     * @param line Line number (starts from 0)
+     * @param column Column number (starts from 0)
+     * @returns Formatted cursor position string: "line X, column Y", returns null if parameters are undefined
      */
     static cursor(line?: number, column?: number): string | null {
         if (line === undefined || column === undefined) {
             return null;
         }
-        return `行${line + 1},列${column + 1}`;
+        return `line${line + 1},column${column + 1}`;
     }
 
     /**
-     * 格式化光标位置日志信息
-     * @param line 行号（从0开始）
-     * @param column 列号（从0开始）
-     * @returns 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     * Format cursor position log information
+     * @param line Line number (starts from 0)
+     * @param column Column number (starts from 0)
+     * @returns Formatted cursor position log string: "Cursor position: line X, column Y"
      */
     static cursorLog(line?: number, column?: number): string {
-        return `光标位置：${this.cursor(line, column) || "无"}`;
+        return `Cursor position: ${this.cursor(line, column) || "none"}`;
     }
 
     /**
-     * 格式化选中范围
-     * @param startLine 开始行号（从0开始）
-     * @param startColumn 开始列号（从0开始）
-     * @param endLine 结束行号（从0开始）
-     * @param endColumn 结束列号（从0开始）
-     * @returns 格式化的选中范围字符串："startLine,startColumn-endLine,endColumn"，如果参数为undefined则返回null
+     * Format selection range
+     * @param startLine Start line number (starts from 0)
+     * @param startColumn Start column number (starts from 0)
+     * @param endLine End line number (starts from 0)
+     * @param endColumn End column number (starts from 0)
+     * @returns Formatted selection range string: "startLine,startColumn-endLine,endColumn", returns null if parameters are undefined
      */
     static selection(startLine?: number, startColumn?: number, endLine?: number, endColumn?: number): string | null {
         if (startLine === undefined || startColumn === undefined || endLine === undefined || endColumn === undefined) {
@@ -267,22 +267,22 @@ export class LogFormatter {
     }
 
     /**
-     * 格式化选中范围日志信息
-     * @param startLine 开始行号（从0开始）
-     * @param startColumn 开始列号（从0开始）
-     * @param endLine 结束行号（从0开始）
-     * @param endColumn 结束列号（从0开始）
-     * @returns 格式化的选中范围日志字符串："选中范围：X"
+     * Format selection range log information
+     * @param startLine Start line number (starts from 0)
+     * @param startColumn Start column number (starts from 0)
+     * @param endLine End line number (starts from 0)
+     * @param endColumn End column number (starts from 0)
+     * @returns Formatted selection range log string: "Selection range: X"
      */
     static selectionLog(startLine?: number, startColumn?: number, endLine?: number, endColumn?: number): string {
-        return `选中范围：${this.selection(startLine, startColumn, endLine, endColumn) || "无"}`;
+        return `Selection range: ${this.selection(startLine, startColumn, endLine, endColumn) || "none"}`;
     }
 }
 
 /**
- * 解析时间戳字符串为毫秒数
- * @param timestampStr 时间戳字符串
- * @returns 毫秒数
+ * Parse timestamp string to milliseconds
+ * @param timestampStr Timestamp string
+ * @returns Milliseconds
  */
 export function parseTimestamp(timestampStr: string): number {
     return new Date(timestampStr).getTime();
@@ -290,8 +290,8 @@ export function parseTimestamp(timestampStr: string): number {
 
 
 /**
- * 连接状态回调接口
- * 参考Kotlin版本的ConnectionCallback接口
+ * Connection state callback interface
+ * Reference Kotlin version ConnectionCallback interface
  */
 export interface ConnectionCallback {
     onConnected(): void;
@@ -302,8 +302,16 @@ export interface ConnectionCallback {
 }
 
 /**
- * 消息包装器类
- * 用于组播消息的统一包装和处理
+ * Message sender interface
+ * Used to abstract message sending functionality of MulticastManager and TcpClientManager
+ */
+export interface MessageSender {
+    sendMessage(messageWrapper: MessageWrapper): boolean;
+}
+
+/**
+ * Message wrapper class
+ * Used for unified packaging and processing of multicast messages
  */
 export class MessageWrapper {
     private static messageSequence = 0;
@@ -321,8 +329,8 @@ export class MessageWrapper {
     }
 
     /**
-     * 生成消息ID
-     * 格式: {localIdentifier}-{sequence}-{timestamp}
+     * Generate message ID
+     * Format: {localIdentifier}-{sequence}-{timestamp}
      */
     static generateMessageId(localIdentifier: string): string {
         MessageWrapper.messageSequence++;
@@ -331,7 +339,7 @@ export class MessageWrapper {
     }
 
     /**
-     * 创建消息包装器
+     * Create message wrapper
      */
     static create(localIdentifier: string, payload: EditorState): MessageWrapper {
         return new MessageWrapper(
@@ -343,14 +351,14 @@ export class MessageWrapper {
     }
 
     /**
-     * 转换为JSON字符串
+     * Convert to JSON string
      */
     toJsonString(): string {
         return JSON.stringify(this);
     }
 
     /**
-     * 从JSON字符串解析MessageWrapper
+     * Parse MessageWrapper from JSON string
      */
     static fromJsonString(jsonString: string): MessageWrapper | null {
         try {
@@ -382,7 +390,7 @@ export class MessageWrapper {
     }
 
     /**
-     * 检查是否是自己发送的消息
+     * Check if message was sent by self
      */
     isOwnMessage(localIdentifier: string): boolean {
         return this.senderId === localIdentifier;

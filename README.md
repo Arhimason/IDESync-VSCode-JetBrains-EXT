@@ -2,16 +2,37 @@
 
 ![IDE Sync Demo](https://github.com/ileeoyo/IDESync-VSCode-JetBrains/raw/main/20250724.gif)
 
-A **decentralized synchronization system** based on **multicast technology** that enables seamless real-time synchronization between multiple VSCode, JetBrains IDE instances simultaneously. Compatible with VSCode forks (Cursor, Windsurf) and JetBrains IntelliJ-based IDEs (Rider, IntelliJ IDEA, WebStorm, PyCharm, etc.). No central server required - all IDEs communicate directly with each other in a peer-to-peer fashion.
+## 🆕 Key Improvements from Original Project
+
+This enhanced version includes significant improvements over the original IDE Sync:
+
+### ✨ New Features
+- **🚀 Auto Launch Partner IDE**: Automatically launches the partner IDE when sync starts if not already running
+- **🔗 Multiple Synced Pairs Support**: Connect multiple VSCode and JetBrains IDE instances simultaneously with independent sync groups
+- **📁 Workspace-Based Auto Discovery**: Automatically discovers and pairs IDEs based on workspace folder matching for precise project synchronization
+- **🔌 Smart Port Selection**: Uses automatic port selection within a configurable range to avoid conflicts, or custom port configuration for advanced users
+
+### 🌐 Localization & UX
+- **🇬🇧 Fully Translated to English**: Complete translation of all UI elements, log messages, and documentation from Russian to English
+- **🎨 Enhanced UI**: Improved settings interfaces with dropdown selections for detected IDEs and better user guidance
+- **💡 Smart IDE Detection**: Automatic detection of available JetBrains IDEs and VSCode forks with one-click selection
+
+### 🏗️ Architecture Improvements
+- **🔄 Pure TCP Architecture**: Removed WebSocket dependencies for cleaner, more reliable communication
+- **⚡ Better Error Handling**: Improved connection management with automatic reconnection and better error reporting
+- **🛠️ Flexible Configuration**: Granular control over port settings, auto-launch behavior, and IDE path detection
+
+A **decentralized synchronization system** based on **TCP technology** that enables seamless real-time synchronization between multiple VSCode, JetBrains IDE instances simultaneously. Compatible with VSCode forks (Cursor, Windsurf) and JetBrains IntelliJ-based IDEs (Rider, IntelliJ IDEA, WebStorm, PyCharm, etc.). No central server required - all IDEs communicate directly with each other in a peer-to-peer fashion.
 
 ## Key Features
 
--   **🔄 Decentralized Architecture**: No central server - direct peer-to-peer communication via multicast
+-   **🔄 Decentralized Architecture**: No central server - direct peer-to-peer communication via TCP
 -   **📂 File Operations Sync**: Real-time file opening and closing synchronization across all connected IDEs
 -   **🎯 Cursor & Selection Sync**: Live cursor position and code selection synchronization with precise line/column accuracy
 -   **🔄 Focus Compensation**: Full workspace synchronization when window loses focus, ensuring other IDEs receive the latest state
 -   **🔗 Multi-Instance Support**: Connect unlimited VSCode and JetBrains IDE instances simultaneously
 -   **⚡ Zero Configuration**: Automatic discovery and connection of IDE instances on the same network, with seamless departure from the network
+-   **🔧 Flexible Port Configuration**: Automatic port selection or custom port configuration for advanced users
 
 ## Installation
 
@@ -37,8 +58,15 @@ A **decentralized synchronization system** based on **multicast technology** tha
 
 Zero-configuration setup with automatic network discovery. Optional customization:
 
--   **Multicast Port**: Set custom port for group identification (default: 3000)
+-   **Use Custom Port**: Enable to use a specific TCP port (default: disabled - automatic selection)
+-   **Custom Port**: Set specific TCP port when custom port is enabled (range: 1024-65535, default: 3000)
 -   **Auto-sync Activation**: Synchronization starts automatically when IDE launches, configurable via checkbox
+-   **Partner IDE Path**: Auto-detect or manually specify the path to partner IDE executable
+
+### Port Configuration Options:
+
+1. **Automatic (Recommended)**: Leave "Use custom port" disabled - the system will automatically select an available port to avoid conflicts
+2. **Custom Port**: Enable "Use custom port" and specify a port for advanced use cases or when multiple sync groups are needed
 
 Access settings:
 -   **VSCode**: Settings > Extensions > IDE Sync - Connect to JetBrains IDE

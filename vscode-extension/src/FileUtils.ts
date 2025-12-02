@@ -4,22 +4,22 @@ import {Logger} from './Logger';
 import {LogFormatter} from './Type';
 
 /**
- * 文件工具类
- * 提供文件操作相关的工具方法
+ * File utility class
+ * Provides file operation related utility methods
  */
 export class FileUtils {
     private static logger: Logger;
 
     /**
-     * 初始化工具类
-     * @param logger 日志记录器
+     * Initialize utility class
+     * @param logger Logger instance
      */
     static initialize(logger: Logger): void {
         this.logger = logger;
     }
 
     /**
-     * 检查文件是否在其他TAB中仍然打开
+     * Check if file is still open in other tabs
      */
     static isFileOpenInOtherTabs(filePath: string): boolean {
         for (const tabGroup of vscode.window.tabGroups.all) {
@@ -36,58 +36,58 @@ export class FileUtils {
     }
 
     /**
-     * 判断是否为常规文件标签（只允许常规文件协议）
+     * Check if it's a regular file tab (only allows regular file protocols)
      */
     static isRegularFileTab(tab: vscode.Tab): boolean {
         const input = tab.input;
 
-        // 只接受 TabInputText 类型，排除其他所有类型
+        // Only accept TabInputText type, exclude all other types
         if (!(input instanceof vscode.TabInputText)) {
             return false;
         }
 
         const uri = input.uri;
 
-        // 复用 isRegularFileUri 的逻辑
+        // Reuse isRegularFileUri logic
         return this.isRegularFileUri(uri);
     }
 
     /**
-     * 判断是否为常规文件URI（只允许常规文件协议）
+     * Check if it's a regular file URI (only allows regular file protocols)
      */
     static isRegularFileUri(uri: vscode.Uri): boolean {
-        // 白名单机制：只允许常规文件协议
+        // Whitelist mechanism: only allow regular file protocols
         const allowedSchemes = [
-            'file'              // 本地文件系统
+            'file'              // Local file system
         ];
 
         return allowedSchemes.includes(uri.scheme);
     }
 
     /**
-     * 检查编辑器是否为有效的常规文件编辑器
-     * @param editor 文本编辑器
-     * @returns 是否为常规文件编辑器
+     * Check if editor is a valid regular file editor
+     * @param editor Text editor
+     * @returns Whether it's a regular file editor
      */
     static isRegularFileEditor(editor: vscode.TextEditor): boolean {
         return this.isRegularFileUri(editor.document.uri);
     }
 
     /**
-     * 获取当前所有打开的文件路径
-     * 只返回常规文件标签，过滤掉特殊标签窗口
+     * Get all currently opened file paths
+     * Only return regular file tabs, filter out special tab windows
      */
     static getAllOpenedFiles(): string[] {
         const openedFiles: string[] = [];
 
         for (const tabGroup of vscode.window.tabGroups.all) {
             for (const tab of tabGroup.tabs) {
-                // 只处理常规文本文件标签，过滤掉所有特殊标签类型
+                // Only handle regular text file tabs, filter out all special tab types
                 if (this.isRegularFileTab(tab)) {
                     const tabInput = tab.input as vscode.TabInputText;
                     const uri = tabInput.uri;
 
-                    // 文件协议已在 isRegularFileTab 中验证，直接添加
+                    // File protocol already validated in isRegularFileTab, add directly
                     openedFiles.push(uri.fsPath);
                 }
             }
@@ -98,27 +98,27 @@ export class FileUtils {
 
 
     /**
-     * 从文件路径提取文件名
-     * @param filePath 文件路径
-     * @returns 文件名
+     * Extract file name from file path
+     * @param filePath File path
+     * @returns File name
      */
     static extractFileName(filePath: string): string {
         return path.basename(filePath);
     }
 
     /**
-     * 获取编辑器的文件路径
-     * @param editor 文本编辑器
-     * @returns 文件路径
+     * Get file path of editor
+     * @param editor Text editor
+     * @returns File path
      */
     static getEditorFilePath(editor: vscode.TextEditor): string {
         return editor.document.uri.fsPath;
     }
 
     /**
-     * 获取编辑器的光标位置
-     * @param editor 文本编辑器
-     * @returns 光标位置 {line: number, column: number}
+     * Get cursor position of editor
+     * @param editor Text editor
+     * @returns Cursor position {line: number, column: number}
      */
     static getEditorCursorPosition(editor: vscode.TextEditor): { line: number, column: number } {
         const position = editor.selection.active;
@@ -129,9 +129,9 @@ export class FileUtils {
     }
 
     /**
-     * 获取编辑器的选中范围坐标
-     * @param editor 文本编辑器
-     * @returns 选中范围坐标 {startLine, startColumn, endLine, endColumn}，如果没有选中则返回null
+     * Get selection range coordinates of editor
+     * @param editor Text editor
+     * @returns Selection range coordinates {startLine, startColumn, endLine, endColumn}, returns null if no selection
      */
     static getSelectionCoordinates(editor: vscode.TextEditor): { startLine: number, startColumn: number, endLine: number, endColumn: number } | null {
         const selection = editor.selection;
@@ -150,31 +150,31 @@ export class FileUtils {
     }
 
     /**
-     * 获取当前活跃编辑器
-     * 使用多层策略确保即使焦点不在编辑器上也能获取到当前编辑区的文本编辑器
-     * @returns 返回当前活跃的TextEditor，如果没有则返回null
+     * Get current active editor
+     * Use multi-layer strategy to ensure getting the current editing area's text editor even when focus is not on the editor
+     * @returns Returns the currently active TextEditor, returns null if none
      */
     static getCurrentActiveEditor(): vscode.TextEditor | null {
-        // 策略1：优先使用activeTextEditor（焦点在编辑器时）
+        // Strategy 1: Prioritize using activeTextEditor (when focus is on editor)
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor && this.isRegularFileEditor(activeEditor)) {
-            this.logger.info(`通过activeTextEditor获取到编辑器: ${this.extractFileName(activeEditor.document.uri.fsPath)}`);
+            this.logger.info(`Got editor via activeTextEditor: ${this.extractFileName(activeEditor.document.uri.fsPath)}`);
             return activeEditor;
         }
 
-        // 策略2：从可见编辑器中获取（焦点不在编辑器时的备用方案）
+        // Strategy 2: Get from visible editors (fallback when focus is not on editor)
         const visibleEditors = vscode.window.visibleTextEditors;
         if (visibleEditors.length > 0) {
-            // 查找常规文件编辑器，优先选择最后一个（通常是最近活跃的）
+            // Find regular file editors, prioritize selecting the last one (usually the most recently active)
             const regularEditors = visibleEditors.filter(editor => this.isRegularFileEditor(editor));
             if (regularEditors.length > 0) {
                 const selectedEditor = regularEditors[regularEditors.length - 1];
-                this.logger.info(`通过可见编辑器获取到编辑器: ${this.extractFileName(selectedEditor.document.uri.fsPath)}`);
+                this.logger.info(`Got editor via visible editors: ${this.extractFileName(selectedEditor.document.uri.fsPath)}`);
                 return selectedEditor;
             }
         }
 
-        // 策略3：从活跃标签组中获取活跃标签对应的编辑器
+        // Strategy 3: Get editor corresponding to active tab from active tab group
         const activeTabGroup = vscode.window.tabGroups.activeTabGroup;
         if (activeTabGroup && activeTabGroup.activeTab) {
             const activeTab = activeTabGroup.activeTab;
@@ -182,67 +182,67 @@ export class FileUtils {
                 const tabInput = activeTab.input as vscode.TabInputText;
                 const uri = tabInput.uri;
 
-                // 查找对应的编辑器
+                // Find corresponding editor
                 const correspondingEditor = vscode.window.visibleTextEditors.find(
                     editor => editor.document.uri.toString() === uri.toString()
                 );
                 if (correspondingEditor && this.isRegularFileEditor(correspondingEditor)) {
-                    this.logger.info(`通过活跃标签组获取到编辑器: ${this.extractFileName(uri.fsPath)}`);
+                    this.logger.info(`Got editor via active tab group: ${this.extractFileName(uri.fsPath)}`);
                     return correspondingEditor;
                 }
             }
         }
 
-        // 策略4：从所有标签组中查找最近的常规文件标签
+        // Strategy 4: Find the most recent regular file tab from all tab groups
         for (const tabGroup of vscode.window.tabGroups.all) {
             if (tabGroup.activeTab && this.isRegularFileTab(tabGroup.activeTab)) {
                 const tabInput = tabGroup.activeTab.input as vscode.TabInputText;
                 const uri = tabInput.uri;
 
-                // 查找对应的编辑器
+                // Find corresponding editor
                 const correspondingEditor = vscode.window.visibleTextEditors.find(
                     editor => editor.document.uri.toString() === uri.toString()
                 );
                 if (correspondingEditor && this.isRegularFileEditor(correspondingEditor)) {
-                    this.logger.info(`通过标签组获取到编辑器: ${this.extractFileName(uri.fsPath)}`);
+                    this.logger.info(`Got editor via tab group: ${this.extractFileName(uri.fsPath)}`);
                     return correspondingEditor;
                 }
             }
         }
 
-        this.logger.warn('未能获取到任何活跃编辑器，可能没有打开文本文件');
+        this.logger.warn('Could not get any active editor, possibly no text files are open');
         return null;
     }
 
     /**
-     * 判断当前编辑器是否获取了焦点
-     * @returns 当前编辑器是否获取了焦点
+     * Check if current editor has focus
+     * @returns Whether current editor has focus
      */
     static isEditorFocused(): boolean {
-        // 在VSCode中，activeTextEditor只有在编辑器获取焦点时才会有值
-        // 如果activeTextEditor存在且是常规文件编辑器，则说明编辑器获取了焦点
+        // In VSCode, activeTextEditor only has a value when the editor has focus
+        // If activeTextEditor exists and is a regular file editor, it means the editor has focus
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor && this.isRegularFileEditor(activeEditor)) {
-            this.logger.info(`编辑器已获取焦点: ${this.extractFileName(activeEditor.document.uri.fsPath)}`);
+            this.logger.info(`Editor has focus: ${this.extractFileName(activeEditor.document.uri.fsPath)}`);
             return true;
         }
 
-        // 如果activeTextEditor不存在或不是常规文件编辑器，则说明焦点在其他地方
-        this.logger.info('编辑器未获取焦点，焦点可能在其他工具窗口或面板上');
+        // If activeTextEditor doesn't exist or is not a regular file editor, it means focus is elsewhere
+        this.logger.info('Editor does not have focus, focus might be on other tool windows or panels');
         return false;
     }
 
 
     /**
-     * 根据文件路径关闭文件
-     * 采用两阶段关闭策略：先尝试tab方式，失败后再用textDocument方式
-     * 只使用路径精确匹配，不使用文件名匹配
+     * Close file by file path
+     * Uses two-phase close strategy: try tab method first, then textDocument method if it fails
+     * Only uses exact path matching, not filename matching
      */
     static async closeFileByPath(filePath: string): Promise<void> {
         try {
-            this.logger.info(`准备关闭文件: ${filePath}`);
+            this.logger.info(`Preparing to close file: ${filePath}`);
 
-            // 第一阶段：尝试通过tabGroups API关闭
+            // Phase 1: Try to close via tabGroups API
             let targetTab: vscode.Tab | undefined;
 
             for (const tabGroup of vscode.window.tabGroups.all) {
@@ -261,62 +261,62 @@ export class FileUtils {
             if (targetTab) {
                 try {
                     await vscode.window.tabGroups.close(targetTab);
-                    this.logger.info(`✅ 通过tab方式成功关闭文件: ${filePath}`);
+                    this.logger.info(`✅ Successfully closed file via tab method: ${filePath}`);
                     return;
                 } catch (tabCloseError) {
-                    this.logger.warn(`tab方式关闭失败，尝试备用方案: ${filePath}`, tabCloseError as Error);
+                    this.logger.warn(`Tab method close failed, trying fallback: ${filePath}`, tabCloseError as Error);
                 }
             } else {
-                this.logger.warn(`❌ 在tab中未找到文件: ${filePath}`);
+                this.logger.warn(`❌ File not found in tabs: ${filePath}`);
             }
 
-            // 第二阶段：备用方案 - 使用原有的textDocument方式关闭
-            this.logger.info(`🔄 尝试通过textDocument方式关闭: ${filePath}`);
+            // Phase 2: Fallback - use original textDocument method to close
+            this.logger.info(`🔄 Trying to close via textDocument method: ${filePath}`);
             const editorToClose = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === filePath);
 
             if (editorToClose) {
                 await vscode.window.showTextDocument(editorToClose);
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                this.logger.info(`✅ 通过textDocument方式成功关闭文件: ${filePath}`);
+                this.logger.info(`✅ Successfully closed file via textDocument method: ${filePath}`);
             } else {
-                this.logger.warn(`❌ 在textDocument中也未找到文件: ${filePath}`);
+                this.logger.warn(`❌ File also not found in textDocument: ${filePath}`);
             }
         } catch (error) {
-            this.logger.warn(`关闭文件失败: ${filePath}`, error as Error);
+            this.logger.warn(`Failed to close file: ${filePath}`, error as Error);
         }
     }
 
     /**
-     * 根据文件路径打开文件
-     * @param filePath 文件路径
-     * @param focusEditor 是否获取焦点，默认为true
-     * @returns 返回打开的TextEditor，如果失败返回null
+     * Open file by file path
+     * @param filePath File path
+     * @param focusEditor Whether to get focus, defaults to true
+     * @returns Returns the opened TextEditor, returns null if failed
      */
     static async openFileByPath(filePath: string, focusEditor: boolean = true): Promise<vscode.TextEditor | null> {
         try {
-            this.logger.info(`准备打开文件: ${filePath}`);
+            this.logger.info(`Preparing to open file: ${filePath}`);
             const uri = vscode.Uri.file(filePath);
             const document = await vscode.workspace.openTextDocument(uri);
             const editor = await vscode.window.showTextDocument(document, {preview: false, preserveFocus: !focusEditor});
-            this.logger.info(`✅ 成功打开文件: ${filePath}`);
+            this.logger.info(`✅ Successfully opened file: ${filePath}`);
             return editor;
         } catch (error) {
-            this.logger.warn(`打开文件失败: ${filePath}`, error as Error);
+            this.logger.warn(`Failed to open file: ${filePath}`, error as Error);
             return null;
         }
     }
 
 
     /**
-     * 统一处理选中和光标移动
-     * 支持光标在任意位置，不受选中范围限制
-     * @param editor 文本编辑器
-     * @param line 光标行号
-     * @param column 光标列号
-     * @param startLine 选中开始行号（可选）
-     * @param startColumn 选中开始列号（可选）
-     * @param endLine 选中结束行号（可选）
-     * @param endColumn 选中结束列号（可选）
+     * Unified handling of selection and cursor movement
+     * Supports cursor at any position, not limited by selection range
+     * @param editor Text editor
+     * @param line Cursor line number
+     * @param column Cursor column number
+     * @param startLine Selection start line number ( optional)
+     * @param startColumn Selection start column number ( optional)
+     * @param endLine Selection end line number ( optional)
+     * @param endColumn Selection end column number ( optional)
      */
     static handleSelectionAndNavigate(
         editor: vscode.TextEditor,
@@ -328,61 +328,61 @@ export class FileUtils {
         endColumn?: number
     ): void {
         try {
-            this.logger.info(`准备处理选中和光标导航: ${LogFormatter.cursorLog(line, column)}, ${LogFormatter.selectionLog(startLine, startColumn, endLine, endColumn)}`);
+            this.logger.info(`Preparing to handle selection and cursor navigation: ${LogFormatter.cursorLog(line, column)}, ${LogFormatter.selectionLog(startLine, startColumn, endLine, endColumn)}`);
 
             const cursorPosition = new vscode.Position(line, column);
 
-            // 检查是否有有效的选中范围参数
+            // Check if there are valid selection range parameters
             const hasValidSelection = startLine !== undefined && startColumn !== undefined &&
                 endLine !== undefined && endColumn !== undefined;
 
-            // 判断是否为非零长度的有效选中
+            // Check if it's a valid non-zero length selection
             const hasNonZeroSelection = hasValidSelection &&
                 !(startLine === endLine && startColumn === endColumn);
 
             if (hasNonZeroSelection) {
-                // 处理有效选中范围，需要正确设置光标位置
+                // Handle valid selection range, need to correctly set cursor position
                 const startPosition = new vscode.Position(startLine, startColumn);
                 const endPosition = new vscode.Position(endLine, endColumn);
 
-                // 通过距离判断选择方向：计算光标到选择开头和结尾的距离
-                // 如果光标更接近开头，说明是从下往上选择（锚点在结尾）
-                // 如果光标更接近结尾，说明是从上往下选择（锚点在开头）
+                // Determine selection direction by distance: calculate distance from cursor to selection start and end
+                // If cursor is closer to start, it means selection is from bottom to top (anchor at end)
+                // If cursor is closer to end, it means selection is from top to bottom (anchor at start)
                 const distanceToStart = Math.abs((line - startLine) * 1000 + (column - startColumn));
                 const distanceToEnd = Math.abs((line - endLine) * 1000 + (column - endColumn));
 
                 if (distanceToStart < distanceToEnd) {
-                    // 光标更接近开始位置，从下往上选择
-                    // VSCode Selection构造函数：new Selection(anchor, active)
-                    // anchor是选择的锚点，active是光标的实际位置
+                    // Cursor is closer to start position, selecting from bottom to top
+                    // VSCode Selection constructor: new Selection(anchor, active)
+                    // anchor is the selection anchor point, active is the actual cursor position
                     editor.selection = new vscode.Selection(endPosition, cursorPosition);
-                    this.logger.info(`✅ 成功设置选中范围（从下往上）: ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}，${LogFormatter.cursorLog(line, column)}`);
+                    this.logger.info(`✅ Successfully set selection range (bottom to top): ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}, ${LogFormatter.cursorLog(line, column)}`);
                 } else {
-                    // 光标更接近结束位置，从上往下选择
+                    // Cursor is closer to end position, selecting from top to bottom
                     editor.selection = new vscode.Selection(startPosition, cursorPosition);
-                    this.logger.info(`✅ 成功设置选中范围（从上往下）: ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}，${LogFormatter.cursorLog(line, column)}`);
+                    this.logger.info(`✅ Successfully set selection range (top to bottom): ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}, ${LogFormatter.cursorLog(line, column)}`);
                 }
             } else {
-                // 清除选中状态，只设置光标位置
+                // Clear selection state, only set cursor position
                 editor.selection = new vscode.Selection(cursorPosition, cursorPosition);
-                this.logger.info(`✅ 成功清除选中状态，${LogFormatter.cursorLog(line, column)}`);
+                this.logger.info(`✅ Successfully cleared selection state, ${LogFormatter.cursorLog(line, column)}`);
             }
 
-            // 确保光标位置在可视区域内
+            // Ensure cursor position is within visible area
             const visibleRange = editor.visibleRanges[0];
             if (!visibleRange || !visibleRange.contains(cursorPosition)) {
                 editor.revealRange(
                     new vscode.Range(cursorPosition, cursorPosition),
                     vscode.TextEditorRevealType.InCenter
                 );
-                this.logger.info(`✅ 光标位置不可见，已执行滚动到: ${LogFormatter.cursor(line, column)}`);
+                this.logger.info(`✅ Cursor position not visible, scrolled to: ${LogFormatter.cursor(line, column)}`);
             } else {
-                this.logger.info(`光标位置已在可视区域内，无需滚动`);
+                this.logger.info(`Cursor position already within visible area, no scrolling needed`);
             }
 
-            this.logger.info(`✅ 选中和光标导航处理完成`);
+            this.logger.info(`✅ Selection and cursor navigation processing completed`);
         } catch (error) {
-            this.logger.warn(`❌ 处理选中和光标导航失败: ${LogFormatter.cursorLog(line, column)}`, error as Error);
+            this.logger.warn(`❌ Failed to handle selection and cursor navigation: ${LogFormatter.cursorLog(line, column)}`, error as Error);
         }
     }
 

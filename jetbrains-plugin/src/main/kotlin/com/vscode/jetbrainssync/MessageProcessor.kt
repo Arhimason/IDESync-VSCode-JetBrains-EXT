@@ -7,8 +7,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 消息处理器
- * 负责WebSocket消息的序列化、反序列化和路由处理
+ * Message Processor
+ * Responsible for WebSocket message serialization, deserialization and routing
  */
 class MessageProcessor(
     private val fileOperationHandler: FileOperationHandler,
@@ -19,12 +19,12 @@ class MessageProcessor(
 
     private val messageTimeOutMs = 5000
 
-    // 组播消息去重相关
+    // Multicast message deduplication related
     private val receivedMessages = mutableMapOf<String, Long>()
     private val maxReceivedMessagesSize = 1000
-    private val messageCleanupIntervalMs = 300000 // 5分钟
+    private val messageCleanupIntervalMs = 300000 // 5 minutes
 
-    // 定时清理相关
+    // Scheduled cleanup related
     private val isShutdown = AtomicBoolean(false)
     private val executorService: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -33,75 +33,75 @@ class MessageProcessor(
     }
 
     /**
-     * 启动消息清理定时任务
+     * Start message cleanup scheduled task
      */
     private fun startMessageCleanupTask() {
         executorService.submit {
             while (!isShutdown.get()) {
                 try {
-                    Thread.sleep(60000) // 每分钟清理一次
+                    Thread.sleep(60000) // Clean up every minute
                     cleanupOldMessages()
                 } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
-                    log.warn("清理消息时发生错误: ${e.message}", e)
+                    log.warn("Error occurred while cleaning messages: ${e.message}", e)
                 }
             }
         }
     }
 
     /**
-     * 处理组播消息
-     * 包含消息解析、去重检查、自己消息过滤等逻辑
+     * Handle multicast message
+     * Contains message parsing, deduplication check, own message filtering and other logic
      */
     fun handleMessage(message: String): Boolean {
         try {
             val messageData = parseMessageData(message)
             if (messageData == null) return false
 
-            // 获取本地标识符
+            // Get local identifier
             val localIdentifier = localIdentifierManager.identifier
 
-            // 检查是否是自己发送的消息
+            // Check if it's a message sent by oneself
             if (messageData.isOwnMessage(localIdentifier)) {
-                log.debug("忽略自己发送的消息")
+                log.debug("Ignoring own message")
                 return false
             }
-            log.info("收到组播消息: $message")
+            log.info("Received multicast message: $message")
 
-            // 检查消息去重
+            // Check message deduplication
             if (isDuplicateMessage(messageData)) {
-                log.debug("忽略重复消息: ${messageData.messageId}")
+                log.debug("Ignoring duplicate message: ${messageData.messageId}")
                 return false
             }
 
-            // 记录消息并处理
+            // Record and process message
             recordMessage(messageData)
-            // 处理消息内容
+            // Process message content
             handleIncomingState(messageData.payload)
             return true
         } catch (e: Exception) {
-            log.warn("处理组播消息时发生错误: ${e.message}", e)
+            log.warn("Error occurred while processing multicast message: ${e.message}", e)
             return false
         }
     }
 
     /**
-     * 解析消息数据
+     * Parse message data
      */
     private fun parseMessageData(message: String): MessageWrapper? {
         return MessageWrapper.fromJsonString(message)
     }
 
     /**
-     * 检查是否是重复消息
+     * Check if message is duplicate
      */
     private fun isDuplicateMessage(messageData: MessageWrapper): Boolean {
         return receivedMessages.containsKey(messageData.messageId)
     }
 
     /**
-     * 记录消息ID
+     * Record message ID
      */
     private fun recordMessage(messageData: MessageWrapper) {
         val currentTime = System.currentTimeMillis()
@@ -113,7 +113,7 @@ class MessageProcessor(
     }
 
     /**
-     * 清理过期的消息记录
+     * Clean up expired message records
      */
     private fun cleanupOldMessages() {
         val currentTime = System.currentTimeMillis()
@@ -127,71 +127,71 @@ class MessageProcessor(
             }
         }
 
-        log.debug("清理过期消息记录，剩余: ${receivedMessages.size}")
+        log.debug("Cleaned up expired message records, remaining: ${receivedMessages.size}")
     }
 
     /**
-     * 处理接收到的消息（兼容旧接口）
+     * Handle received message (compatible with old interface)
      */
     fun handleIncomingMessage(message: String) {
         try {
-            log.info("收到消息: $message")
+            log.info("Received message: $message")
             val state = gson.fromJson(message, EditorState::class.java)
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+            log.info("\uD83C\uDF55Parsing message: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}")
 
-            // 验证消息有效性
+            // Validate message validity
             if (!isValidMessage(state)) {
                 return
             }
 
-            // 路由到文件操作处理器
+            // Route to file operation handler
             fileOperationHandler.handleIncomingState(state)
 
         } catch (e: Exception) {
-            log.warn("解析消息失败: ${e.message}", e)
+            log.warn("Failed to parse message: ${e.message}", e)
         }
     }
 
     /**
-     * 处理接收到的状态（新接口）
+     * Handle received state (new interface)
      */
     private fun handleIncomingState(state: EditorState) {
         try {
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+            log.info("\uD83C\uDF55Parsing message: ${state.action} ${state.filePath}, ${state.getCursorLog()}, ${state.getSelectionLog()}")
 
-            // 验证消息有效性
+            // Validate message validity
             if (!isValidMessage(state)) {
                 return
             }
 
-            // 路由到文件操作处理器
+            // Route to file operation handler
             fileOperationHandler.handleIncomingState(state)
 
         } catch (e: Exception) {
-            log.warn("处理状态失败: ${e.message}", e)
+            log.warn("Failed to process state: ${e.message}", e)
         }
     }
 
     /**
-     * 验证消息有效性
+     * Validate message validity
      */
     private fun isValidMessage(state: EditorState): Boolean {
-//        // 忽略来自自己的消息
+//        // Ignore messages from oneself
 //        if (state.source == SourceType.JETBRAINS) {
 //            return false
 //        }
 
-        // 只处理来自活跃IDE的消息
+        // Only process messages from active IDE
         if (!state.isActive) {
-            log.info("忽略来自非活跃VSCode的消息")
+            log.info("Ignoring message from inactive VSCode")
             return false
         }
 
-        // 检查消息时效性
+        // Check message timeliness
         val messageTime = parseTimestamp(state.timestamp)
         val currentTime = System.currentTimeMillis()
-        if (currentTime - messageTime > messageTimeOutMs) { // 5秒过期
-            log.info("忽略过期消息，时间差: ${currentTime - messageTime}ms")
+        if (currentTime - messageTime > messageTimeOutMs) { // 5 seconds expiration
+            log.info("Ignoring expired message, time difference: ${currentTime - messageTime}ms")
             return false
         }
 

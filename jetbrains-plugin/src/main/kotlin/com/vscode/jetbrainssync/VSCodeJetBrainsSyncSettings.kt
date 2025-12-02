@@ -10,8 +10,11 @@ import com.intellij.openapi.project.Project
 )
 class VSCodeJetBrainsSyncSettings : PersistentStateComponent<VSCodeJetBrainsSyncSettings.State> {
     data class State(
-        var port: Int = 3000,
-        var autoStartSync: Boolean = false
+        var useCustomPort: Boolean = false,
+        var customPort: Int = 3000,
+        var autoStartSync: Boolean = false,
+        var autoLaunchPartner: Boolean = false,
+        var partnerIDEPath: String = ""
     )
 
     private var myState = State()

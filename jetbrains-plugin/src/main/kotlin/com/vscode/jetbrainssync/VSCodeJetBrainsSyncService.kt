@@ -7,22 +7,22 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 
 /**
- * VSCode与JetBrains同步服务（重构版）
+ * VSCode and JetBrains Sync Service (Refactored Version)
  *
- * 采用模块化设计，主要组件：
- * - 窗口状态管理器：统一管理窗口活跃状态
- * - WebSocket连接管理器：负责连接的建立、维护和重连
- * - 编辑器状态管理器：管理状态缓存、防抖和去重
- * - 文件操作处理器：处理文件的打开、关闭和导航
- * - 事件监听管理器：统一管理各种事件监听器
- * - 消息处理器：处理消息的序列化和反序列化
- * - 操作队列处理器：确保操作的原子性和顺序性
+ * Adopting modular design with main components:
+ * - Window State Manager: Unified management of window active state
+ * - TCP Server Manager: Responsible for TCP server establishment, maintenance and client connections
+ * - Editor State Manager: Manages state caching, debouncing and deduplication
+ * - File Operation Handler: Handles file opening, closing and navigation
+ * - Event Listener Manager: Unified management of various event listeners
+ * - Message Processor: Handles message serialization and deserialization
+ * - Operation Queue Processor: Ensures operation atomicity and ordering
  */
 @Service(Service.Level.PROJECT)
 class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val log: Logger = Logger.getInstance(VSCodeJetBrainsSyncService::class.java)
 
-    // 核心组件
+    // Core Components
     private val fileUtils = FileUtils(project, log)
     private val localIdentifierManager = LocalIdentifierManager(project)
     private val windowStateManager = WindowStateManager(project)
@@ -30,77 +30,84 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val eventListenerManager = EventListenerManager(project, editorStateManager, windowStateManager, fileUtils)
     private val fileOperationHandler = FileOperationHandler(editorStateManager, windowStateManager, fileUtils)
     private val messageProcessor = MessageProcessor(fileOperationHandler, localIdentifierManager)
-    private val multicastManager = MulticastManager(project, messageProcessor)
-    private val operationQueueProcessor = OperationQueueProcessor(multicastManager, localIdentifierManager)
+    
+    // Using TCP server manager to replace multicast manager
+    private val tcpServerManager = TcpServerManager(project, messageProcessor)
+    private val operationQueueProcessor = OperationQueueProcessor(tcpServerManager, localIdentifierManager)
+    
+    // Partner launcher
+    private val partnerLauncher = PartnerLauncher(project)
 
 
     init {
-        log.info("初始化VSCode-JetBrains同步服务（重构版）")
+        log.info("Initializing VSCode-JetBrains sync service (refactored version)")
 
-        // FileUtils 已在构造时初始化，无需额外初始化
+        // FileUtils has been initialized during construction, no additional initialization needed
 
-        // 初始化窗口状态管理器
+        // Initialize window state manager
         windowStateManager.initialize()
 
-        // 设置状态栏
+        // Setup status bar
         setupStatusBar()
 
-        // 设置组件间的回调关系
+        // Setup callback relationships between components
         setupComponentCallbacks()
-        // 初始化事件监听器
+        // Initialize event listeners
         eventListenerManager.setupEditorListeners()
 
-        // 检查自动启动配置
+        // Check auto-start configuration
         checkAutoStartConfig()
 
-        log.info("同步服务初始化完成")
+        log.info("Sync service initialization completed")
     }
 
 
     /**
-     * 设置状态栏组件
+     * Setup status bar component
      */
     private fun setupStatusBar() {
         ApplicationManager.getApplication().invokeLater {
             SyncStatusBarWidgetFactory().createWidget(project)
-            log.info("状态栏组件设置完成")
+            log.info("Status bar component setup completed")
         }
     }
 
     /**
-     * 设置组件间的回调关系
+     * Setup callback relationships between components
      */
     private fun setupComponentCallbacks() {
-        // 窗口状态变化回调
+        // Window state change callback
         windowStateManager.setOnWindowStateChangeCallback { isActive ->
             if (!isActive) {
-                // 窗口失焦时发送工作区同步状态
+                // Send workspace sync state when window loses focus
                 val workspaceSyncState = editorStateManager.createWorkspaceSyncState(true)
-                log.info("窗口失焦，发送工作区同步状态，包含${workspaceSyncState.openedFiles?.size ?: 0}个打开的文件")
+                log.info("Window lost focus, sending workspace sync state with ${workspaceSyncState.openedFiles?.size ?: 0} opened files")
                 editorStateManager.updateState(workspaceSyncState)
             }
         }
 
-        // 连接状态变化回调
-        multicastManager.setConnectionCallback(object : ConnectionCallback {
+        // Connection state change callback
+        tcpServerManager.setConnectionCallback(object : ConnectionCallback {
             override fun onConnected() {
-                log.info("组播连接状态变更: 已连接");
+                log.info("TCP connection state changed: Connected")
                 updateStatusBarWidget()
                 editorStateManager.sendCurrentState(windowStateManager.isWindowActive())
             }
 
             override fun onDisconnected() {
-                log.info("组播连接状态变更: 已断开");
+                log.info("TCP connection state changed: Disconnected")
                 updateStatusBarWidget()
             }
 
             override fun onReconnecting() {
-                log.info("组播连接状态变更: 正在重连");
+                log.info("TCP connection state changed: Waiting to connect")
                 updateStatusBarWidget()
+                // If no client connected, prompt to launch partner IDE
+                checkAndPromptPartnerLaunch()
             }
         })
 
-        // 状态变化回调
+        // State change callback
         editorStateManager.setStateChangeCallback(object : EditorStateManager.StateChangeCallback {
             override fun onStateChanged(state: EditorState) {
                 if (state.isActive) {
@@ -111,20 +118,40 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     }
 
     /**
-     * 检查自动启动配置
+     * Check auto-start configuration
      */
     private fun checkAutoStartConfig() {
         val settings = VSCodeJetBrainsSyncSettings.getInstance(project)
         if (settings.state.autoStartSync) {
-            log.info("检测到自动启动配置已开启，正在启动同步功能...")
-            multicastManager.toggleAutoReconnect()
+            log.info("Auto-start configuration detected as enabled, starting sync functionality...")
+            tcpServerManager.toggleAutoReconnect()
         } else {
-            log.info("自动启动配置已关闭，需要手动启动同步功能")
+            log.info("Auto-start configuration is disabled, manual start of sync functionality required")
         }
     }
 
     /**
-     * 更新状态栏显示
+     * Check and prompt to launch partner IDE
+     */
+    private fun checkAndPromptPartnerLaunch() {
+        // Delayed check, give time for client connection
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                java.util.concurrent.TimeUnit.SECONDS.sleep(3)
+                if (tcpServerManager.isConnecting() && !tcpServerManager.isConnected()) {
+                    partnerLauncher.checkAndPromptLaunch {
+                        // Callback after launch completion - no special handling needed, client will connect automatically
+                        log.info("Partner IDE launch process completed")
+                    }
+                }
+            } catch (e: InterruptedException) {
+                // Ignore
+            }
+        }
+    }
+
+    /**
+     * Update status bar display
      */
     private fun updateStatusBarWidget() {
         ApplicationManager.getApplication().invokeLater {
@@ -136,46 +163,53 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
 
 
     /**
-     * 切换组播同步状态
+     * Toggle TCP sync state
      */
     fun toggleAutoReconnect() {
-        multicastManager.toggleAutoReconnect()
+        tcpServerManager.toggleAutoReconnect()
         updateStatusBarWidget()
     }
 
-    // 公共接口方法（委托给各个模块）
+    // Public interface methods (delegated to various modules)
 
-    fun isConnected(): Boolean = multicastManager.isConnected()
-    fun isAutoReconnect(): Boolean = multicastManager.isAutoReconnect()
-    fun isConnecting(): Boolean = multicastManager.isConnecting()
-    fun isDisconnected(): Boolean = multicastManager.isDisconnected()
+    fun isConnected(): Boolean = tcpServerManager.isConnected()
+    fun isAutoReconnect(): Boolean = tcpServerManager.isAutoReconnect()
+    fun isConnecting(): Boolean = tcpServerManager.isConnecting()
+    fun isDisconnected(): Boolean = tcpServerManager.isDisconnected()
 
     /**
-     * 重启连接（WebSocket和组播）
+     * Get server port
      */
-    fun updateMulticastPort() {
-        log.info("重启所有连接（WebSocket和组播）")
+    fun getServerPort(): Int = tcpServerManager.getServerPort()
 
-        // 更新组播端口配置
-        multicastManager.updateMulticastPort()
+    /**
+     * Get partner info
+     */
+    fun getPartnerInfo(): PartnerInfo? = tcpServerManager.getPartnerInfo()
 
+    /**
+     * Restart connection
+     */
+    fun restartConnection() {
+        log.info("Restarting TCP server connection")
+        tcpServerManager.restartConnection()
         updateStatusBarWidget()
     }
 
 
     /**
-     * 清理资源
+     * Cleanup resources
      */
     override fun dispose() {
-        log.info("开始清理同步服务资源（重构版）")
+        log.info("Starting cleanup of sync service resources (refactored version)")
 
-        // 按顺序清理各个组件
+        // Clean up components in order
         operationQueueProcessor.dispose()
-        multicastManager.dispose()
+        tcpServerManager.dispose()
         editorStateManager.dispose()
         eventListenerManager.dispose()
-        windowStateManager.dispose()  // 清理窗口状态管理器
+        windowStateManager.dispose()
 
-        log.info("同步服务资源清理完成")
+        log.info("Sync service resource cleanup completed")
     }
 }
